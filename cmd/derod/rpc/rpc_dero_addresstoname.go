@@ -1,7 +1,6 @@
 package rpc
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"runtime/debug"
@@ -28,10 +27,7 @@ func AddressToName(ctx context.Context, p rpc.AddressToName_Params) (result rpc.
 		return
 	}
 
-	var getsc_result rpc.GetSC_Result
-	getsc_result.VariableStringKeys = map[string]interface{}{}
-	//getsc_result.VariableUint64Keys = map[uint64]interface{}{}
-	//getsc_result.Balances = map[string]uint64{}
+	stringkeys := map[string]interface{}{}
 
 	scid := crypto.HashHexToHash("0000000000000000000000000000000000000000000000000000000000000001")
 
@@ -66,7 +62,7 @@ func AddressToName(ctx context.Context, p rpc.AddressToName_Params) (result rpc.
 						switch vark.Type {
 						case dvm.String:
 							if varv.Type == dvm.String {
-								getsc_result.VariableStringKeys[vark.ValueString] = []byte(varv.ValueString)
+								stringkeys[vark.ValueString] = []byte(varv.ValueString)
 							}
 
 						case dvm.Uint64:
@@ -81,17 +77,17 @@ func AddressToName(ctx context.Context, p rpc.AddressToName_Params) (result rpc.
 		}
 	}
 
-	//fmt.Println(len(getsc_result.VariableStringKeys))
+	//fmt.Println(len(stringkeys))
 
-	req_addr_raw := req_addr.Compressed()
+	req_addr_raw := string(req_addr.Compressed())
 
-	for k, v := range getsc_result.VariableStringKeys {
+	for k, v := range stringkeys {
 		_, err3 := rpc.NewAddressFromCompressedKeys(v.([]byte))
 		if err3 != nil {
 			//fmt.Printf("%s, %x\n", k, v)
 			continue
 		}
-		if bytes.Equal(req_addr_raw, v.([]byte)) {
+		if req_addr_raw == string(v.([]byte)) {
 			//fmt.Printf("%s, %x\n", k, v)
 			result.Names = append(result.Names, k)
 		}
@@ -103,7 +99,6 @@ func AddressToName(ctx context.Context, p rpc.AddressToName_Params) (result rpc.
 		result.Status = "OK"
 	} else {
 		err = fmt.Errorf("Not Found")
-		return
 	}
 
 	return
