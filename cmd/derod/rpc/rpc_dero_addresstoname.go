@@ -62,7 +62,7 @@ func AddressToName(ctx context.Context, p rpc.AddressToName_Params) (result rpc.
 						switch vark.Type {
 						case dvm.String:
 							if varv.Type == dvm.String {
-								stringkeys[vark.ValueString] = []byte(varv.ValueString)
+								stringkeys[vark.ValueString] = varv.ValueString
 							}
 
 						case dvm.Uint64:
@@ -82,12 +82,15 @@ func AddressToName(ctx context.Context, p rpc.AddressToName_Params) (result rpc.
 	req_addr_raw := string(req_addr.Compressed())
 
 	for k, v := range stringkeys {
-		_, err3 := rpc.NewAddressFromCompressedKeys(v.([]byte))
+		//It's only needed for debugging
+		/*
+		_, err3 := rpc.NewAddressFromCompressedKeys([]byte(v.(string)))
 		if err3 != nil {
 			//fmt.Printf("%s, %x\n", k, v)
 			continue
 		}
-		if req_addr_raw == string(v.([]byte)) {
+		*/
+		if req_addr_raw == v.(string) {
 			//fmt.Printf("%s, %x\n", k, v)
 			result.Names = append(result.Names, k)
 		}
