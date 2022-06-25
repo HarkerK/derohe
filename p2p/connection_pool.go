@@ -45,6 +45,8 @@ import "github.com/deroproject/derohe/transaction"
 
 import "github.com/cenkalti/rpc2"
 
+import "github.com/lucas-clemente/quic-go"
+
 // any connection incoming/outgoing can only be in this state
 //type Conn_State uint32
 
@@ -75,8 +77,7 @@ type Connection struct {
 	Syncing               int32  // denotes whether we are syncing and thus stop pinging
 
 	Client  *rpc2.Client
-	Conn    net.Conn // actual object to talk
-	ConnTls net.Conn // tls layered conn
+	Conn    *QuicConn // actual object to talk
 
 	StateHash crypto.Hash // statehash at the top
 
@@ -109,6 +110,11 @@ type Connection struct {
 	Mutex sync.Mutex // used only by connection go routine
 }
 
+type QuicConn struct {
+	quic.Connection
+	quic.Stream
+}
+
 func Address(c *Connection) string {
 	if c.Addr == nil {
 		return ""
@@ -119,9 +125,9 @@ func Address(c *Connection) string {
 func (c *Connection) exit() {
 	defer globals.Recover(0)
 	c.onceexit.Do(func() {
-		c.ConnTls.Close()
-		c.Conn.Close()
 		c.Client.Close()
+		//c.Conn.Stream.Close()
+		c.Conn.Connection.CloseWithError(0, "")
 	})
 
 }

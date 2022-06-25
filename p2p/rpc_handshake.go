@@ -149,6 +149,7 @@ func (c *Connection) Handshake(request Handshake_Struct, response *Handshake_Str
 	defer handle_connection_panic(c)
 	if request.Peer_ID == GetPeerID() { // check if self connection exit
 		//rlog.Tracef(1, "Same peer ID, probably self connection, disconnecting from this client")
+		logger.V(4).Info("Same peer ID, probably self connection, disconnecting from this client")
 		c.exit()
 		return fmt.Errorf("Same peer ID")
 	}

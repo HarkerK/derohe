@@ -27,7 +27,7 @@ import "strings"
 import "math/big"
 import "strconv"
 
-import "crypto/sha1"
+//import "crypto/sha1"
 import "crypto/ecdsa"
 import "crypto/elliptic"
 
@@ -45,13 +45,16 @@ import "github.com/deroproject/derohe/globals"
 import "github.com/deroproject/derohe/metrics"
 import "github.com/deroproject/derohe/blockchain"
 
-import "github.com/xtaci/kcp-go/v5"
-import "golang.org/x/crypto/pbkdf2"
+//import "github.com/xtaci/kcp-go/v5"
+//import "golang.org/x/crypto/pbkdf2"
 import "golang.org/x/time/rate"
 
 import "github.com/cenkalti/rpc2"
 
 //import "github.com/txthinking/socks5"
+
+import "github.com/lucas-clemente/quic-go"
+import "context"
 
 var chain *blockchain.Blockchain // external reference to chain
 
@@ -277,29 +280,6 @@ func P2P_engine() {
 
 }
 
-func tunekcp(conn *kcp.UDPSession) {
-	conn.SetACKNoDelay(true)
-	if os.Getenv("TURBO") == "0" {
-		conn.SetNoDelay(1, 10, 2, 1) // tuning paramters for local stack for fast retransmission stack
-	} else {
-		conn.SetNoDelay(0, 40, 0, 0) // tuning paramters for local
-	}
-
-	size := 1 * 1024 * 1024 // set the buffer size max possible upto 1 MB, default is 1 MB
-	if os.Getenv("UDP_READ_BUF_CONN") != "" {
-		size, _ = strconv.Atoi(os.Getenv("UDP_READ_BUF_CONN"))
-		if size <= 64*1024 {
-			size = 64 * 1024
-		}
-	}
-	for size >= 64*1024 {
-		if err := conn.SetReadBuffer(size); err == nil {
-			break
-		}
-		size = size - (64 * 1024)
-	}
-}
-
 // will try to connect with given endpoint
 // will block until the connection dies or is killed
 func connect_with_endpoint(endpoint string, sync_node bool) {
@@ -332,71 +312,36 @@ func connect_with_endpoint(endpoint string, sync_node bool) {
 		backoff_mutex.Unlock()
 	}
 
-	var masterkey = pbkdf2.Key(globals.Config.Network_ID.Bytes(), globals.Config.Network_ID.Bytes(), 1024, 32, sha1.New)
-	var blockcipher, _ = kcp.NewAESBlockCrypt(masterkey)
-
-	var conn *kcp.UDPSession
-
-	// since we may be connecting through socks, grab the remote ip for our purpose rightnow
-	//conn, err := globals.Dialer.Dial("tcp", remote_ip.String())
-	if globals.Arguments["--socks-proxy"] == nil {
-		conn, err = kcp.DialWithOptions(remote_ip.String(), blockcipher, 10, 3)
-	} else { // we must move through a socks 5 UDP ASSOCIATE supporting proxy, ssh implementation is partial
-		err = fmt.Errorf("socks proxying is not supported")
-		logger.V(0).Error(err, "Not suported", "server", globals.Arguments["--socks-proxy"])
-		return
-		/*uri, err := url.Parse("socks5://" + globals.Arguments["--socks-proxy"].(string)) // "socks5://demo:demo@192.168.99.100:1080"
-		if err != nil {
-			logger.V(0).Error(err, "Error parsing socks proxy", "server", globals.Arguments["--socks-proxy"])
-			return
-		}
-		_ = uri
-		sserver := uri.Host
-		if uri.Port() != "" {
-
-			host, _, err := net.SplitHostPort(uri.Host)
-			if err != nil {
-				logger.V(0).Error(err, "Error parsing socks proxy", "server", globals.Arguments["--socks-proxy"])
-				return
-			}
-			sserver = host  + ":"+ uri.Port()
-		}
-
-		fmt.Printf("sserver %s   host %s port %s\n", sserver, uri.Host, uri.Port())
-		username := ""
-		password := ""
-		if uri.User != nil {
-			username = uri.User.Username()
-			password,_ = uri.User.Password()
-		}
-		tcpTimeout := 10
-		udpTimeout := 10
-		c, err := socks5.NewClient(sserver, username, password, tcpTimeout, udpTimeout)
-		if err != nil {
-			logger.V(0).Error(err, "Error connecting to socks proxy", "server", globals.Arguments["--socks-proxy"])
-			return
-		}
-		udpconn, err := c.Dial("udp", remote_ip.String())
-		if err != nil {
-			logger.V(0).Error(err, "Error connecting to remote host using socks proxy", "socks", globals.Arguments["--socks-proxy"],"remote",remote_ip.String())
-			return
-		}
-		conn,err = kcp.NewConn(remote_ip.String(),blockcipher,10,3,udpconn)
-		*/
+	tlsconfig := &tls.Config{
+		InsecureSkipVerify: true, 
+		NextProtos: []string{"derohe-quic-test"},
 	}
 
+	quicconfig := &quic.Config{
+		KeepAlive: true,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10 * time.Second)
+	defer cancel()
+
+    session, err := quic.DialAddrContext(ctx, remote_ip.String(), tlsconfig, quicconfig)
 	if err != nil {
 		logger.V(3).Error(err, "Dial failed", "endpoint", endpoint)
 		Peer_SetFail(ParseIPNoError(remote_ip.String())) // update peer list as we see
-		conn.Close()
 		return //nil, fmt.Errorf("Dial failed err %s", err.Error())
 	}
-
-	tunekcp(conn) // set tunings for low latency
+	
+	stream, err := session.OpenStreamSync(ctx)
+	if err != nil {
+		logger.V(3).Error(err, "Dial failed", "endpoint", endpoint)
+		Peer_SetFail(ParseIPNoError(remote_ip.String())) // update peer list as we see
+		_ = session.CloseWithError(0, "")
+		return
+	}
 
 	// TODO we need to choose fastest cipher here ( so both clients/servers are not loaded)
-	conntls := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
-	process_outgoing_connection(conn, conntls, remote_ip, false, sync_node)
+	quicconn := &QuicConn{session, stream}
+	process_outgoing_connection(quicconn, remote_ip, false, sync_node)
 
 }
 
@@ -501,7 +446,7 @@ func P2P_Server_v2() {
 
 	default_address := "0.0.0.0:0" // be default choose a random port
 	if _, ok := globals.Arguments["--p2p-bind"]; ok && globals.Arguments["--p2p-bind"] != nil {
-		addr, err := net.ResolveTCPAddr("tcp", globals.Arguments["--p2p-bind"].(string))
+		addr, err := net.ResolveUDPAddr("udp", globals.Arguments["--p2p-bind"].(string))
 		if err != nil {
 			logger.Error(err, "--p2p-bind address is invalid")
 		} else {
@@ -521,12 +466,9 @@ func P2P_Server_v2() {
 		remote_addr := remote_addr_interface.(net.Addr)
 
 		conn_interface, _ := c.State.Get("conn")
-		conn := conn_interface.(net.Conn)
+		conn := conn_interface.(*QuicConn)
 
-		tlsconn_interface, _ := c.State.Get("tlsconn")
-		tlsconn := tlsconn_interface.(net.Conn)
-
-		connection := &Connection{Client: c, Conn: conn, ConnTls: tlsconn, Addr: remote_addr, State: HANDSHAKE_PENDING, Incoming: true}
+		connection := &Connection{Client: c, Conn: conn, Addr: remote_addr, State: HANDSHAKE_PENDING, Incoming: true}
 		connection.logger = logger.WithName("incoming").WithName(remote_addr.String())
 
 		in, out := Peer_Direction_Count()
@@ -548,16 +490,16 @@ func P2P_Server_v2() {
 
 	set_handlers(srv)
 
-	tlsconfig := &tls.Config{Certificates: []tls.Certificate{generate_random_tls_cert()}}
-	//l, err := tls.Listen("tcp", default_address, tlsconfig) // listen as TLS server
+	tlsconfig := &tls.Config{
+		Certificates: []tls.Certificate{generate_random_tls_cert()},
+		NextProtos: []string{"derohe-quic-test"},
+	}
 
-	_ = tlsconfig
+	quicconfig := &quic.Config{
+		KeepAlive: true,
+	}
 
-	var masterkey = pbkdf2.Key(globals.Config.Network_ID.Bytes(), globals.Config.Network_ID.Bytes(), 1024, 32, sha1.New)
-	var blockcipher, _ = kcp.NewAESBlockCrypt(masterkey)
-
-	// listen to incoming tcp connections tls style
-	l, err := kcp.ListenWithOptions(default_address, blockcipher, 10, 3)
+	l, err := quic.ListenAddr(default_address, tlsconfig, quicconfig)
 	if err != nil {
 		logger.Error(err, "Could not listen", "address", default_address)
 		return
@@ -571,11 +513,11 @@ func P2P_Server_v2() {
 
 	// A common pattern is to start a loop to continously accept connections
 	for {
-		conn, err := l.AcceptKCP() //accept connections using Listener.Accept()
+		session, err := l.Accept(context.Background()) //accept connections using Listener.Accept()
 		if err != nil {
 			select {
 			case <-Exit_Event:
-				l.Close() // p2p is shutting down, close the listening socket
+				l.Close() // p2p is shutting down, close the listener
 				return
 			default:
 			}
@@ -584,11 +526,11 @@ func P2P_Server_v2() {
 		}
 
 		if !accept_limiter.Allow() { // if rate limiter allows, then only add else drop the connection
-			conn.Close()
+			session.CloseWithError(0, "")
 			continue
 		}
 
-		raddr := conn.RemoteAddr().(*net.UDPAddr)
+		raddr := session.RemoteAddr().(*net.UDPAddr)
 
 		backoff_mutex.Lock()
 		backoff[ParseIPNoError(raddr.String())] = time.Now().Unix() + globals.Global_Random.Int63n(200) // random backing of upto 200 secs
@@ -598,21 +540,30 @@ func P2P_Server_v2() {
 
 		if IsAddressConnected(ParseIPNoError(raddr.String())) {
 			logger.V(4).Info("incoming address is already connected", "ip", raddr.String())
-			conn.Close()
+			session.CloseWithError(0, "")
+			continue
 
 		} else if IsAddressInBanList(ParseIPNoError(raddr.IP.String())) { //if incoming IP is banned, disconnect now
 			logger.V(2).Info("Incoming IP is banned, disconnecting now", "IP", raddr.IP.String())
-			conn.Close()
+			session.CloseWithError(0, "")
+			continue
 		}
 
-		tunekcp(conn) // tuning paramters for local stack
-		tlsconn := tls.Server(conn, tlsconfig)
+		ctx, cancel := context.WithTimeout(context.Background(), 10 * time.Second)
+		stream, err := session.AcceptStream(ctx)
+		cancel()
+		if err != nil {
+			logger.V(1).Error(err, "Err while accepting incoming connection")
+			session.CloseWithError(0, "")
+			continue
+		}
+
+		quicconn := &QuicConn{session, stream}
 		state := rpc2.NewState()
 		state.Set("addr", raddr)
-		state.Set("conn", conn)
-		state.Set("tlsconn", tlsconn)
+		state.Set("conn", quicconn)
 
-		go srv.ServeCodecWithState(NewCBORCodec(tlsconn), state)
+		go srv.ServeCodecWithState(NewCBORCodec(stream), state)
 
 	}
 
@@ -678,12 +629,12 @@ func set_handlers(o interface{}) {
 
 }
 
-func process_outgoing_connection(conn net.Conn, tlsconn net.Conn, remote_addr net.Addr, incoming, sync_node bool) {
+func process_outgoing_connection(quicconn *QuicConn, remote_addr net.Addr, incoming, sync_node bool) {
 	defer globals.Recover(0)
 
-	client := rpc2.NewClientWithCodec(NewCBORCodec(tlsconn))
+	client := rpc2.NewClientWithCodec(NewCBORCodec(quicconn.Stream))
 
-	c := &Connection{Client: client, Conn: conn, ConnTls: tlsconn, Addr: remote_addr, State: HANDSHAKE_PENDING, Incoming: incoming, SyncNode: sync_node}
+	c := &Connection{Client: client, Conn: quicconn, Addr: remote_addr, State: HANDSHAKE_PENDING, Incoming: incoming, SyncNode: sync_node}
 	defer c.exit()
 	c.logger = logger.WithName("outgoing").WithName(remote_addr.String())
 	set_handlers(client)
