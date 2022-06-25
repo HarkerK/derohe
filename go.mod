@@ -21,8 +21,8 @@ require (
 	github.com/gorilla/websocket v1.5.0
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/klauspost/reedsolomon v1.10.0
-	github.com/lesismal/llib v1.1.6
-	github.com/lesismal/nbio v1.2.20
+	github.com/lesismal/llib v1.1.5
+	github.com/lesismal/nbio v1.2.15
 	github.com/lucas-clemente/quic-go v0.27.2
 	github.com/miekg/dns v1.1.50
 	github.com/minio/sha256-simd v1.0.0
