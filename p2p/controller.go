@@ -321,6 +321,7 @@ func connect_with_endpoint(endpoint string, sync_node bool) {
 		KeepAlive: true,
 	}
 
+	logger.V(4).Info("dialing", "endpoint", endpoint)
 	ctx, cancel := context.WithTimeout(context.Background(), 10 * time.Second)
 	defer cancel()
 

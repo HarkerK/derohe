@@ -3,7 +3,7 @@ package p2p
 // this file implements CBOR codec to prevent from certain attacks
 import "fmt"
 import "bytes"
-import "io"
+//import "io"
 //import "net"
 import "sync"
 import "time"
@@ -37,9 +37,10 @@ var bufPool = &sync.Pool{
 func Read_Data_Frame(r quic.Stream, obj interface{}) error {
 	var frame_length_buf [4]byte
 
-	//connection.set_timeout()
 	r.SetReadDeadline(time.Now().Add(READ_TIMEOUT))
-	nbyte, err := io.ReadFull(r, frame_length_buf[:])
+
+	//nbyte, err := io.ReadFull(r, frame_length_buf[:])
+	nbyte, err := r.Read(frame_length_buf[:])
 	if err != nil {
 		return err
 	}
@@ -64,7 +65,8 @@ func Read_Data_Frame(r quic.Stream, obj interface{}) error {
 
 	data_buf := buf.Bytes()
 	data_buf = data_buf[:frame_length]
-	data_size, err := io.ReadFull(r, data_buf)
+	//data_size, err := io.ReadFull(r, data_buf)
+	data_size, err := r.Read(data_buf)
 	if err != nil || data_size <= 0 || uint32(data_size) != frame_length {
 		return fmt.Errorf("Could not read data size  read %d, frame length %d err %s", data_size, frame_length, err)
 	}
@@ -85,6 +87,7 @@ func Write_Data_Frame(w quic.Stream, obj interface{}) error {
 	binary.LittleEndian.PutUint32(frame_length_buf[:], uint32(len(data_bytes)))
 
 	w.SetWriteDeadline(time.Now().Add(WRITE_TIMEOUT))
+
 	if _, err = w.Write(frame_length_buf[:]); err != nil {
 		return err
 	}
