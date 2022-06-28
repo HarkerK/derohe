@@ -152,13 +152,13 @@ func Connection_Pending_Clear() {
 			v.exit()
 			v.logger.V(3).Info("Cleaning pending connection")
 		}
-
+		*/
 		if time.Now().Sub(v.update_received).Round(time.Second).Seconds() > 20 {
 			v.exit()
 			Connection_Delete(v)
 			v.logger.V(1).Info("Purging connection due since idle")
 		}
-		*/
+
 		if IsAddressInBanList(Address(v)) {
 			v.exit()
 			Connection_Delete(v)
