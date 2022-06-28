@@ -101,7 +101,7 @@ type Connection struct {
 
 	ping_count int64
 
-	clock_index   int
+	clock_index   int32
 	clock_offsets [MAX_CLOCK_DATA_SET]time.Duration
 	delays        [MAX_CLOCK_DATA_SET]time.Duration
 	clock_offset  int64 // duration updated on every miniblock
@@ -202,8 +202,8 @@ func UniqueConnections() map[uint64]*Connection {
 	unique_map := map[uint64]*Connection{}
 	connection_map.Range(func(k, value interface{}) bool {
 		v := value.(*Connection)
-		if atomic.LoadUint32(&v.State) != HANDSHAKE_PENDING && GetPeerID() != v.Peer_ID { //and skip ourselves
-			unique_map[v.Peer_ID] = v // map will automatically deduplicate/overwrite previous
+		if atomic.LoadUint32(&v.State) != HANDSHAKE_PENDING && GetPeerID() != atomic.LoadUint64(&v.Peer_ID) { //and skip ourselves
+			unique_map[atomic.LoadUint64(&v.Peer_ID)] = v // map will automatically deduplicate/overwrite previous
 		}
 		return true
 	})
@@ -214,7 +214,7 @@ func UniqueConnections() map[uint64]*Connection {
 func ping_loop() {
 	connection_map.Range(func(k, value interface{}) bool {
 		c := value.(*Connection)
-		if atomic.LoadUint32(&c.State) != HANDSHAKE_PENDING && GetPeerID() != c.Peer_ID /*&& atomic.LoadInt32(&c.ping_in_progress) == 0*/ {
+		if atomic.LoadUint32(&c.State) != HANDSHAKE_PENDING && GetPeerID() != atomic.LoadUint64(&c.Peer_ID) /*&& atomic.LoadInt32(&c.ping_in_progress) == 0*/ {
 			if atomic.LoadInt32(&c.Syncing) >= 1 {
 				return true
 			}
@@ -226,8 +226,8 @@ func ping_loop() {
 				var request, response Dummy
 				fill_common(&request.Common) // fill common info
 
-				c.ping_count++
-				if c.ping_count%10 == 1 {
+				atomic.AddInt64(&c.ping_count, 1)
+				if atomic.LoadInt64(&c.ping_count)%10 == 1 {
 					request.Common.PeerList = get_peer_list_specific(Address(c))
 				}
 
@@ -281,7 +281,7 @@ func Connection_Print() {
 	for i := range clist {
 
 		// skip pending  handshakes and skip ourselves
-		if atomic.LoadUint32(&clist[i].State) == HANDSHAKE_PENDING || GetPeerID() == clist[i].Peer_ID {
+		if atomic.LoadUint32(&clist[i].State) == HANDSHAKE_PENDING || GetPeerID() == atomic.LoadUint64(&clist[i].Peer_ID) {
 			//	continue
 		}
 
@@ -311,14 +311,14 @@ func Connection_Print() {
 		var color_normal = "\033[0m"
 
 		//if our_height is more than
-		if our_topo_height > clist[i].TopoHeight {
+		if our_topo_height > atomic.LoadInt64(&clist[i].TopoHeight) {
 			fmt.Print(color_yellow)
 		}
 
 		ctime := time.Now().Sub(clist[i].Created).Round(time.Second)
 
-		hstring := fmt.Sprintf("%d/%d/%d", clist[i].StableHeight, clist[i].Height, clist[i].TopoHeight)
-		fmt.Printf("%-30s %16x %5d %7s %7s %7s %23s %s %5d %7s %7s     %16s %s %x\n", Address(clist[i])+" ("+ctime.String()+")", clist[i].Peer_ID, clist[i].Port, state, time.Duration(atomic.LoadInt64(&clist[i].Latency)).Round(time.Millisecond).String(), time.Duration(atomic.LoadInt64(&clist[i].clock_offset)).Round(time.Millisecond).String(), hstring, dir, 0, humanize.Bytes(atomic.LoadUint64(&clist[i].BytesIn)), humanize.Bytes(atomic.LoadUint64(&clist[i].BytesOut)), version, tag, clist[i].StateHash[:])
+		hstring := fmt.Sprintf("%d/%d/%d", atomic.LoadInt64(&clist[i].StableHeight), atomic.LoadInt64(&clist[i].Height), atomic.LoadInt64(&clist[i].TopoHeight))
+		fmt.Printf("%-30s %16x %5d %7s %7s %7s %23s %s %5d %7s %7s     %16s %s %x\n", Address(clist[i])+" ("+ctime.String()+")", atomic.LoadUint64(&clist[i].Peer_ID), atomic.LoadUint32(&clist[i].Port), state, time.Duration(atomic.LoadInt64(&clist[i].Latency)).Round(time.Millisecond).String(), time.Duration(atomic.LoadInt64(&clist[i].clock_offset)).Round(time.Millisecond).String(), hstring, dir, 0, humanize.Bytes(atomic.LoadUint64(&clist[i].BytesIn)), humanize.Bytes(atomic.LoadUint64(&clist[i].BytesOut)), version, tag, clist[i].StateHash[:])
 
 		fmt.Print(color_normal)
 	}
@@ -352,7 +352,7 @@ func Best_Peer_Height() (best_height, best_topo_height int64) {
 func Peer_Count() (Count uint64) {
 	connection_map.Range(func(k, value interface{}) bool {
 		v := value.(*Connection)
-		if atomic.LoadUint32(&v.State) != HANDSHAKE_PENDING && GetPeerID() != v.Peer_ID {
+		if atomic.LoadUint32(&v.State) != HANDSHAKE_PENDING && GetPeerID() != atomic.LoadUint64(&v.Peer_ID) {
 			Count++
 		}
 		return true
@@ -364,7 +364,7 @@ func Peer_Count() (Count uint64) {
 func Peer_Direction_Count() (Incoming uint64, Outgoing uint64) {
 	connection_map.Range(func(k, value interface{}) bool {
 		v := value.(*Connection)
-		if atomic.LoadUint32(&v.State) != HANDSHAKE_PENDING && GetPeerID() != v.Peer_ID {
+		if atomic.LoadUint32(&v.State) != HANDSHAKE_PENDING && GetPeerID() != atomic.LoadUint64(&v.Peer_ID) {
 			if v.Incoming {
 				Incoming++
 			} else {
@@ -413,7 +413,7 @@ func broadcast_Block_Coded(cbl *block.Complete_Block, PeerID uint64, first_seen 
 	}
 
 	sort.SliceStable(connections, func(i, j int) bool {
-		return connections[i].Latency < connections[j].Latency
+		return atomic.LoadInt64(&connections[i].Latency) < atomic.LoadInt64(&connections[j].Latency)
 	})
 
 	bw_factor, _ := strconv.Atoi(os.Getenv("BW_FACTOR"))
@@ -433,7 +433,7 @@ func broadcast_Block_Coded(cbl *block.Complete_Block, PeerID uint64, first_seen 
 				return
 			default:
 			}
-			if atomic.LoadUint32(&v.State) != HANDSHAKE_PENDING && PeerID != v.Peer_ID && v.Peer_ID != GetPeerID() { // skip pre-handshake connections
+			if atomic.LoadUint32(&v.State) != HANDSHAKE_PENDING && PeerID != atomic.LoadUint64(&v.Peer_ID) && atomic.LoadUint64(&v.Peer_ID) != GetPeerID() { // skip pre-handshake connections
 
 				// if the other end is > 2 blocks behind, do not broadcast block to him
 				// this is an optimisation, since if the other end is syncing
@@ -499,7 +499,7 @@ func broadcast_Chunk(chunk *Block_Chunk, PeerID uint64, first_seen int64) { // i
 			return
 		default:
 		}
-		if atomic.LoadUint32(&v.State) != HANDSHAKE_PENDING && PeerID != v.Peer_ID && v.Peer_ID != GetPeerID() { // skip pre-handshake connections
+		if atomic.LoadUint32(&v.State) != HANDSHAKE_PENDING && PeerID != atomic.LoadUint64(&v.Peer_ID) && atomic.LoadUint64(&v.Peer_ID) != GetPeerID() { // skip pre-handshake connections
 
 			// if the other end is > 50 blocks behind, do not broadcast block to hime
 			// this is an optimisation, since if the other end is syncing
@@ -565,7 +565,7 @@ func broadcast_MiniBlock(mbl block.MiniBlock, PeerID uint64, first_seen int64) {
 			return
 		default:
 		}
-		if atomic.LoadUint32(&v.State) != HANDSHAKE_PENDING && PeerID != v.Peer_ID && v.Peer_ID != GetPeerID() { // skip pre-handshake connections
+		if atomic.LoadUint32(&v.State) != HANDSHAKE_PENDING && PeerID != atomic.LoadUint64(&v.Peer_ID) && atomic.LoadUint64(&v.Peer_ID) != GetPeerID() { // skip pre-handshake connections
 
 			// if the other end is > 50 blocks behind, do not broadcast block to hime
 			// this is an optimisation, since if the other end is syncing
@@ -620,7 +620,7 @@ func broadcast_Tx(tx *transaction.Transaction, PeerID uint64, sent int64) (relay
 			return
 		default:
 		}
-		if atomic.LoadUint32(&v.State) != HANDSHAKE_PENDING && PeerID != v.Peer_ID && v.Peer_ID != GetPeerID() { // skip pre-handshake connections
+		if atomic.LoadUint32(&v.State) != HANDSHAKE_PENDING && PeerID != atomic.LoadUint64(&v.Peer_ID) && atomic.LoadUint64(&v.Peer_ID) != GetPeerID() { // skip pre-handshake connections
 
 			// if the other end is > 50 blocks behind, do not broadcast block to hime
 			// this is an optimisation, since if the other end is syncing
@@ -691,8 +691,8 @@ func trigger_sync() {
 			// islagging := true
 			//connection.Unlock()
 			if islagging {
-				if connection.Pruned > chain.Load_Block_Topological_order(chain.Get_Top_ID()) && chain.Get_Height() != 0 {
-					connection.logger.V(1).Info("We cannot resync with the peer, since peer chain is pruned", "height", connection.Height, "pruned", connection.Pruned)
+				if atomic.LoadInt64(&connection.Pruned) > chain.Load_Block_Topological_order(chain.Get_Top_ID()) && chain.Get_Height() != 0 {
+					connection.logger.V(1).Info("We cannot resync with the peer, since peer chain is pruned", "height", atomic.LoadInt64(&connection.Height), "pruned", atomic.LoadInt64(&connection.Pruned))
 					continue
 				}
 
@@ -703,7 +703,7 @@ func trigger_sync() {
 				if islagging {
 					//connection.Lock()
 
-					connection.logger.V(1).Info("We need to resync with the peer", "our_height", height, "height", connection.Height, "pruned", connection.Pruned)
+					connection.logger.V(1).Info("We need to resync with the peer", "our_height", height, "height", atomic.LoadInt64(&connection.Height), "pruned", atomic.LoadInt64(&connection.Pruned))
 
 					//connection.Unlock()
 					// set mode to syncronising

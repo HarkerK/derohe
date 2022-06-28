@@ -57,7 +57,7 @@ func (connection *Connection) update(common *Common_Struct) {
 
 	//connection.Top_ID = common.Top_ID
 
-	if connection.Top_Version != common.Top_Version {
+	if atomic.LoadUint64(&connection.Top_Version) != common.Top_Version {
 		atomic.StoreUint64(&connection.Top_Version, common.Top_Version) // satify race detector GOD
 	}
 	if common.StateHash != hash {
@@ -71,7 +71,7 @@ func (connection *Connection) update(common *Common_Struct) {
 
 		connection.clock_offsets[connection.clock_index] = offset_micro(common.T0, common.T1, common.T2, T3)
 		connection.delays[connection.clock_index] = rtt_micro(common.T0, common.T1, common.T2, T3)
-		connection.clock_index = (connection.clock_index + 1) % MAX_CLOCK_DATA_SET
+		atomic.StoreInt32(&connection.clock_index, (connection.clock_index + 1) % MAX_CLOCK_DATA_SET)
 		connection.calculate_avg_offset()
 
 		//fmt.Printf("clock index %d\n",connection.clock_index)
@@ -97,5 +97,5 @@ func (connection *Connection) calculate_avg_offset() {
 			count++
 		}
 	}
-	connection.clock_offset = int64(total / count)
+	atomic.StoreInt64(&connection.clock_offset, int64(total / count))
 }

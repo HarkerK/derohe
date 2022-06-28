@@ -97,26 +97,26 @@ func (connection *Connection) dispatch_test_handshake() {
 	if len(response.DaemonVersion) < 128 {
 		connection.DaemonVersion = response.DaemonVersion
 	}
-	connection.Port = response.Local_Port
-	connection.Peer_ID = response.Peer_ID
+	atomic.StoreUint32(&connection.Port, response.Local_Port)
+	atomic.StoreUint64(&connection.Peer_ID, response.Peer_ID)
 	if len(response.Tag) < 128 {
 		connection.Tag = response.Tag
 	}
 	if response.Pruned >= 1 {
-		connection.Pruned = response.Pruned
+		atomic.StoreInt64(&connection.Pruned, response.Pruned)
 	}
 
 	// TODO we must also add the peer to our list
 	// which can be distributed to other peers
-	if connection.Port != 0 && connection.Port <= 65535 { // peer is saying it has an open port, handshake is success so add peer
+	if atomic.LoadUint32(&connection.Port) != 0 && atomic.LoadUint32(&connection.Port) <= 65535 { // peer is saying it has an open port, handshake is success so add peer
 
 		var p Peer
 		if net.ParseIP(Address(connection)).To4() != nil { // if ipv4
-			p.Address = fmt.Sprintf("%s:%d", Address(connection), connection.Port)
+			p.Address = fmt.Sprintf("%s:%d", Address(connection), atomic.LoadUint32(&connection.Port))
 		} else { // if ipv6
-			p.Address = fmt.Sprintf("[%s]:%d", Address(connection), connection.Port)
+			p.Address = fmt.Sprintf("[%s]:%d", Address(connection), atomic.LoadUint32(&connection.Port))
 		}
-		p.ID = connection.Peer_ID
+		p.ID = atomic.LoadUint64(&connection.Peer_ID)
 
 		p.LastConnected = uint64(time.Now().UTC().Unix())
 
@@ -163,7 +163,7 @@ func (c *Connection) Handshake(request Handshake_Struct, response *Handshake_Str
 	response.Fill()
 
 	c.update(&request.Common) // update common information
-	if c.State == ACTIVE {
+	if atomic.LoadUint32(&c.State) == ACTIVE {
 		for i := range request.PeerList {
 			if i < 31 {
 				Peer_Add(&Peer{Address: request.PeerList[i].Addr, LastConnected: uint64(time.Now().UTC().Unix())})

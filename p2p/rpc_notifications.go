@@ -189,7 +189,7 @@ func (c *Connection) NotifyMiniBlock(request Objects, response *Dummy) (err erro
 		} else { // rebroadcast miniblock
 			valid_found = true
 			if valid_found {
-				broadcast_MiniBlock(mbl, c.Peer_ID, request.Sent) // do not send back to the original peer
+				broadcast_MiniBlock(mbl, atomic.LoadUint64(&c.Peer_ID), request.Sent) // do not send back to the original peer
 			}
 		}
 	}
@@ -243,7 +243,7 @@ func (c *Connection) processChunkedBlock(request Objects, data_shard_count, pari
 	// check if we can add ourselves to chain
 	if err, ok := chain.Add_Complete_Block(&cbl); ok { // if block addition was successfil
 		// notify all peers
-		Broadcast_Block(&cbl, c.Peer_ID) // do not send back to the original peer
+		Broadcast_Block(&cbl, atomic.LoadUint64(&c.Peer_ID)) // do not send back to the original peer
 	} else { // ban the peer for sometime
 		if err == errormsg.ErrInvalidPoW {
 			c.logger.Error(err, "This peer should be banned and terminated")
