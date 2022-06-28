@@ -147,6 +147,7 @@ func Connection_Delete(c *Connection) {
 func Connection_Pending_Clear() {
 	connection_map.Range(func(k, value interface{}) bool {
 		v := value.(*Connection)
+		/*
 		if atomic.LoadUint32(&v.State) == HANDSHAKE_PENDING && time.Now().Sub(v.Created) > 10*time.Second { //and skip ourselves
 			v.exit()
 			v.logger.V(3).Info("Cleaning pending connection")
@@ -157,7 +158,7 @@ func Connection_Pending_Clear() {
 			Connection_Delete(v)
 			v.logger.V(1).Info("Purging connection due since idle")
 		}
-
+		*/
 		if IsAddressInBanList(Address(v)) {
 			v.exit()
 			Connection_Delete(v)
@@ -236,6 +237,8 @@ func ping_loop() {
 				if err := c.Client.CallWithContext(ctx, "Peer.Ping", request, &response); err != nil {
 					c.logger.V(2).Error(err, "ping failed")
 					c.exit()
+					Connection_Delete(c)
+					c.logger.V(1).Info("Purging connection due since idle")
 					return
 				}
 				c.update(&response.Common) // update common information
