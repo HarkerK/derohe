@@ -3,7 +3,7 @@ package p2p
 // this file implements CBOR codec to prevent from certain attacks
 import "fmt"
 import "bytes"
-//import "io"
+import "io"
 //import "net"
 import "sync"
 import "time"
@@ -39,8 +39,8 @@ func Read_Data_Frame(r quic.Stream, obj interface{}) error {
 
 	r.SetReadDeadline(time.Now().Add(READ_TIMEOUT))
 
-	//nbyte, err := io.ReadFull(r, frame_length_buf[:])
-	nbyte, err := r.Read(frame_length_buf[:])
+	nbyte, err := io.ReadFull(r, frame_length_buf[:])
+	//nbyte, err := r.Read(frame_length_buf[:]) // it doesn't work on Windows for some reason
 	if err != nil {
 		return err
 	}
@@ -65,8 +65,8 @@ func Read_Data_Frame(r quic.Stream, obj interface{}) error {
 
 	data_buf := buf.Bytes()
 	data_buf = data_buf[:frame_length]
-	//data_size, err := io.ReadFull(r, data_buf)
-	data_size, err := r.Read(data_buf)
+	data_size, err := io.ReadFull(r, data_buf)
+	//data_size, err := r.Read(data_buf) // it doesn't work on Windows for some reason
 	if err != nil || data_size <= 0 || uint32(data_size) != frame_length {
 		return fmt.Errorf("Could not read data size  read %d, frame length %d err %s", data_size, frame_length, err)
 	}
