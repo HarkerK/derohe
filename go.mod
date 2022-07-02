@@ -23,7 +23,7 @@ require (
 	github.com/klauspost/reedsolomon v1.10.0
 	github.com/lesismal/llib v1.1.5
 	github.com/lesismal/nbio v1.2.15
-	github.com/lucas-clemente/quic-go v0.27.2
+	github.com/lucas-clemente/quic-go v0.28.0
 	github.com/miekg/dns v1.1.50
 	github.com/minio/sha256-simd v1.0.0
 	github.com/robfig/cron/v3 v3.0.1
@@ -34,10 +34,10 @@ require (
 	github.com/ybbus/jsonrpc v2.1.2+incompatible
 	go.etcd.io/bbolt v1.3.6
 	go.uber.org/zap v1.21.0
-	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e
-	golang.org/x/net v0.0.0-20211112202133-69e39bad7dc2
+	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d
+	golang.org/x/net v0.0.0-20220630215102-69896b714898
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20220622161953-175b2fd9d664
+	golang.org/x/sys v0.0.0-20220701225701-179beb0bd1a1
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
@@ -49,15 +49,16 @@ require (
 	github.com/cenkalti/hub v1.0.1 // indirect
 	github.com/cheekybits/genny v1.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/fsnotify/fsnotify v1.4.9 // indirect
+	github.com/fsnotify/fsnotify v1.5.4 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0 // indirect
 	github.com/klauspost/compress v1.10.3 // indirect
 	github.com/klauspost/cpuid/v2 v2.0.14 // indirect
 	github.com/marten-seemann/qtls-go1-16 v0.1.5 // indirect
 	github.com/marten-seemann/qtls-go1-17 v0.1.2 // indirect
 	github.com/marten-seemann/qtls-go1-18 v0.1.2 // indirect
+	github.com/marten-seemann/qtls-go1-19 v0.1.0-beta.1 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
-	github.com/onsi/ginkgo v1.16.4 // indirect
+	github.com/onsi/ginkgo v1.16.5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/templexxx/cpu v0.0.7 // indirect
@@ -68,8 +69,8 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
-	golang.org/x/mod v0.4.2 // indirect
-	golang.org/x/tools v0.1.6-0.20210726203631-07bc1bf47fb2 // indirect
+	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
+	golang.org/x/tools v0.1.11 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

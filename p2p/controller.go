@@ -318,7 +318,7 @@ func connect_with_endpoint(endpoint string, sync_node bool) {
 	}
 
 	quicconfig := &quic.Config{
-		KeepAlive: true,
+		KeepAlivePeriod: 10*time.Second,
 	}
 
 	logger.V(4).Info("dialing", "endpoint", endpoint)
@@ -497,7 +497,7 @@ func P2P_Server_v2() {
 	}
 
 	quicconfig := &quic.Config{
-		KeepAlive: true,
+		KeepAlivePeriod: 10*time.Second,
 	}
 
 	l, err := quic.ListenAddr(default_address, tlsconfig, quicconfig)
