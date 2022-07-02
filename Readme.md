@@ -4,9 +4,6 @@ This uses [quic-go](https://github.com/lucas-clemente/quic-go) instead of kcp-go
 This is my personal experiment for learning purpose.
 
 #### Todo
-Fix this bug.
-
-`invalid memory address or nil pointer dereference`
 
 ### Welcome to the DEROHE Testnet
 

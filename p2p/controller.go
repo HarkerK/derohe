@@ -593,12 +593,23 @@ func set_handler(base interface{}, methodname string, handler interface{}) {
 }
 
 func getc(client *rpc2.Client) *Connection {
+	/*
 	if ci, found := client.State.Get("c"); found {
 		return ci.(*Connection)
 	} else {
 		//panic("no connection attached") // automatically handled by higher layers
 		return nil
 	}
+	*/
+	// try to get connection a few times because sometimes handshake starts before setting state
+	for i :=0 ; i < 4; i++ {
+		if ci, found := client.State.Get("c"); found {
+			return ci.(*Connection)
+		}
+		//logger.V(4).Info("connection state not found")
+		time.Sleep(250 * time.Millisecond)
+	}
+	return nil
 }
 
 // we need the following RPCS to work
