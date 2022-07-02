@@ -65,6 +65,13 @@ func (handshake *Handshake_Struct) Fill() {
 // all clients start with handshake, then other party sends avtive to mark that connection is active
 func (connection *Connection) dispatch_test_handshake() {
 	defer handle_connection_panic(connection)
+
+	if !connection.Conn.isActive() {
+		logger.V(4).Info("connection is already closed at the other end, terminating it")
+		connection.exit()
+		return
+	}
+	
 	var request, response Handshake_Struct
 	request.Fill()
 

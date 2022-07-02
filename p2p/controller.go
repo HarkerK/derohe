@@ -745,3 +745,13 @@ func ParseIPNoError(s string) string {
 	ip, _ := ParseIP(s)
 	return ip
 }
+
+// check if the quic connection is already closed at the other end.
+func (conn *QuicConn) isActive() bool {
+	select {
+	case <-conn.Connection.Context().Done():
+		return false
+	default:
+		return true
+	}
+}
