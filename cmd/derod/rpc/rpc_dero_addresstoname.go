@@ -26,8 +26,7 @@ func AddressToName(ctx context.Context, p rpc.AddressToName_Params) (result rpc.
 		err = fmt.Errorf("Invalid Address")
 		return
 	}
-
-	stringkeys := map[string]interface{}{}
+	req_addr_raw := string(req_addr.Compressed())
 
 	scid := crypto.HashHexToHash("0000000000000000000000000000000000000000000000000000000000000001")
 
@@ -37,19 +36,19 @@ func AddressToName(ctx context.Context, p rpc.AddressToName_Params) (result rpc.
 		topoheight = p.TopoHeight
 	}
 
-	toporecord, err2 := chain.Store.Topo_store.Read(topoheight)
+	toporecord, err := chain.Store.Topo_store.Read(topoheight)
 	// we must now fill in compressed ring members
-	if err2 == nil {
+	if err == nil {
 		var ss *graviton.Snapshot
-		ss, err2 = chain.Store.Balance_store.LoadSnapshot(toporecord.State_Version)
-		if err2 == nil {
+		ss, err = chain.Store.Balance_store.LoadSnapshot(toporecord.State_Version)
+		if err == nil {
 			var sc_data_tree *graviton.Tree
-			sc_data_tree, err2 = ss.GetTree(string(scid[:]))
-			if err2 == nil {
+			sc_data_tree, err = ss.GetTree(string(scid[:]))
+			if err == nil {
 				// user requested all variables
 				cursor := sc_data_tree.Cursor()
 				var k, v []byte
-				for k, v, err2 = cursor.First(); err2 == nil; k, v, err2 = cursor.Next() {
+				for k, v, err = cursor.First(); err == nil; k, v, err = cursor.Next() {
 					var vark, varv dvm.Variable
 
 					_ = vark
@@ -62,7 +61,9 @@ func AddressToName(ctx context.Context, p rpc.AddressToName_Params) (result rpc.
 						switch vark.Type {
 						case dvm.String:
 							if varv.Type == dvm.String {
-								stringkeys[vark.ValueString] = varv.ValueString
+								if req_addr_raw == varv.ValueString {
+									result.Names = append(result.Names, vark.ValueString)
+								}
 							}
 
 						case dvm.Uint64:
@@ -77,29 +78,11 @@ func AddressToName(ctx context.Context, p rpc.AddressToName_Params) (result rpc.
 		}
 	}
 
-	//fmt.Println(len(stringkeys))
-
-	req_addr_raw := string(req_addr.Compressed())
-
-	for k, v := range stringkeys {
-		//It's only needed for debugging
-		/*
-		_, err3 := rpc.NewAddressFromCompressedKeys([]byte(v.(string)))
-		if err3 != nil {
-			//fmt.Printf("%s, %x\n", k, v)
-			continue
-		}
-		*/
-		if req_addr_raw == v.(string) {
-			//fmt.Printf("%s, %x\n", k, v)
-			result.Names = append(result.Names, k)
-		}
-	}
-
 	if len(result.Names) != 0 {
 		sort.Strings(result.Names)
 		result.Address = strings.TrimSpace(p.Address)
 		result.Status = "OK"
+		err = nil
 	} else {
 		err = fmt.Errorf("Not Found")
 	}
