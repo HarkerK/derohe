@@ -67,7 +67,7 @@ func (connection *Connection) dispatch_test_handshake() {
 	defer handle_connection_panic(connection)
 
 	if !connection.Conn.isActive() {
-		logger.V(4).Info("connection is already closed at the other end, terminating it")
+		logger.V(4).Info("connection is already closed, terminating it")
 		connection.exit()
 		return
 	}
@@ -81,7 +81,8 @@ func (connection *Connection) dispatch_test_handshake() {
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
 	if err := connection.Client.CallWithContext(ctx, "Peer.Handshake", request, &response); err != nil {
-		connection.logger.V(4).Error(err, "cannot handshake")
+		//connection.logger.V(4).Error(err, "cannot handshake")
+		connection.logger.V(4).Info("cannot handshake", "error", err)
 		connection.exit()
 		return
 	}

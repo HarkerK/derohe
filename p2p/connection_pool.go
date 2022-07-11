@@ -235,7 +235,8 @@ func ping_loop() {
 				defer cancel()
 
 				if err := c.Client.CallWithContext(ctx, "Peer.Ping", request, &response); err != nil {
-					c.logger.V(2).Error(err, "ping failed")
+					//c.logger.V(2).Error(err, "ping failed")
+					c.logger.V(2).Info("ping failed", "error", err)
 					c.exit()
 					Connection_Delete(c)
 					c.logger.V(1).Info("Purging connection due since idle")

@@ -288,7 +288,8 @@ func connect_with_endpoint(endpoint string, sync_node bool) {
 
 	remote_ip, err := net.ResolveUDPAddr("udp", endpoint)
 	if err != nil {
-		logger.V(3).Error(err, "Resolve address failed:", "endpoint", endpoint)
+		//logger.V(3).Error(err, "Resolve address failed:", "endpoint", endpoint)
+		logger.V(3).Info("Resolve address failed:", "endpoint", endpoint, "error", err)
 		return
 	}
 
@@ -319,22 +320,25 @@ func connect_with_endpoint(endpoint string, sync_node bool) {
 
 	quicconfig := &quic.Config{
 		KeepAlivePeriod: 10*time.Second,
+		//InitialStreamReceiveWindow: (1 << 10) * 128,
 	}
 
-	logger.V(4).Info("dialing", "endpoint", endpoint)
+	//logger.V(4).Info("dialing", "endpoint", endpoint)
 	ctx, cancel := context.WithTimeout(context.Background(), 10 * time.Second)
 	defer cancel()
 
     session, err := quic.DialAddrContext(ctx, remote_ip.String(), tlsconfig, quicconfig)
 	if err != nil {
-		logger.V(3).Error(err, "Dial failed", "endpoint", endpoint)
+		//logger.V(3).Error(err, "Dial failed", "endpoint", endpoint)
+		logger.V(3).Info("Dial failed", "endpoint", endpoint, "error", err)
 		Peer_SetFail(ParseIPNoError(remote_ip.String())) // update peer list as we see
 		return //nil, fmt.Errorf("Dial failed err %s", err.Error())
 	}
 	
 	stream, err := session.OpenStreamSync(ctx)
 	if err != nil {
-		logger.V(3).Error(err, "Dial failed", "endpoint", endpoint)
+		//logger.V(3).Error(err, "Dial failed", "endpoint", endpoint)
+		logger.V(3).Info("Dial failed", "endpoint", endpoint, "error", err)
 		Peer_SetFail(ParseIPNoError(remote_ip.String())) // update peer list as we see
 		_ = session.CloseWithError(0, "")
 		return
@@ -498,6 +502,7 @@ func P2P_Server_v2() {
 
 	quicconfig := &quic.Config{
 		KeepAlivePeriod: 10*time.Second,
+		//InitialStreamReceiveWindow: (1 << 10) * 128,
 	}
 
 	l, err := quic.ListenAddr(default_address, tlsconfig, quicconfig)
@@ -607,7 +612,7 @@ func getc(client *rpc2.Client) *Connection {
 			return ci.(*Connection)
 		}
 		//logger.V(4).Info("connection state not found")
-		time.Sleep(250 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 	return nil
 }
@@ -757,7 +762,7 @@ func ParseIPNoError(s string) string {
 	return ip
 }
 
-// check if the quic connection is already closed at the other end.
+// check if the quic connection is already closed.
 func (conn *QuicConn) isActive() bool {
 	select {
 	case <-conn.Connection.Context().Done():
