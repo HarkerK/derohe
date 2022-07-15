@@ -59,10 +59,10 @@ const MAX_RINGSIZE = 128 // <= 128,  ringsize will be accepted
 const PREMINE uint64 = 1228125400000 // this is total supply of old chain ( considering both chain will be running together for some time)
 
 type SettingsStruct struct {
-	MAINNET_BOOTSTRAP_DIFFICULTY uint64 `env:"MAINNET_BOOTSTRAP_DIFFICULTY" envDefault:"100"` // mainnet bootstrap is 10 MH/s
+	MAINNET_BOOTSTRAP_DIFFICULTY uint64 `env:"MAINNET_BOOTSTRAP_DIFFICULTY" envDefault:"500"` // mainnet bootstrap is 10 MH/s
 	MAINNET_MINIMUM_DIFFICULTY   uint64 `env:"MAINNET_MINIMUM_DIFFICULTY" envDefault:"100"`     // mainnet minimum is 100 KH/s
 
-	TESTNET_BOOTSTRAP_DIFFICULTY uint64 `env:"TESTNET_BOOTSTRAP_DIFFICULTY" envDefault:"100"`
+	TESTNET_BOOTSTRAP_DIFFICULTY uint64 `env:"TESTNET_BOOTSTRAP_DIFFICULTY" envDefault:"500"`
 	TESTNET_MINIMUM_DIFFICULTY   uint64 `env:"TESTNET_MINIMUM_DIFFICULTY" envDefault:"100"`
 }
 
