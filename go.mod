@@ -21,8 +21,8 @@ require (
 	github.com/gorilla/websocket v1.5.0
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/klauspost/reedsolomon v1.10.0
-	github.com/lesismal/llib v1.1.5
-	github.com/lesismal/nbio v1.2.15
+	github.com/lesismal/llib v1.1.6
+	github.com/lesismal/nbio v1.2.20
 	github.com/lucas-clemente/quic-go v0.28.0
 	github.com/miekg/dns v1.1.50
 	github.com/minio/sha256-simd v1.0.0
@@ -37,7 +37,7 @@ require (
 	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d
 	golang.org/x/net v0.0.0-20220630215102-69896b714898
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20220701225701-179beb0bd1a1
+	golang.org/x/sys v0.0.0-20220712014510-0a85c31ab51e
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
