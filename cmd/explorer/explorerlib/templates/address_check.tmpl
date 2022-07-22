@@ -1,0 +1,14 @@
+{{define "address_check"}}
+{{ template "header" . }}
+
+<div>
+<h3> <font color="blue">Address:</font> {{.address}} </h3>
+{{ if .isRegistered }}
+    <h3><font color="blue"> This address is registered. </font></h3>
+{{ else }}
+    <h3><font color="red"> This address is unregistered. </font></h3>
+{{ end }}
+</div>
+
+{{ template "footer" . }}  
+{{end}}

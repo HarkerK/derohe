@@ -201,6 +201,7 @@ func StartServer(loggerb logr.Logger, daemon_endpoint string, listen_address str
 	http.HandleFunc("/block/", block_handler)
 	http.HandleFunc("/txpool/", txpool_handler)
 	http.HandleFunc("/tx/", tx_handler)
+	http.HandleFunc("/address/", address_handler)
 	http.HandleFunc("/", root_handler)
 
 	go func() {
@@ -805,6 +806,34 @@ func page_handler(w http.ResponseWriter, r *http.Request) {
 	show_page(w, page)
 }
 
+// check if the dero address is registered
+func address_handler(w http.ResponseWriter, r *http.Request) {
+	param := ""
+	fmt.Sscanf(r.URL.EscapedPath(), "/address/%s", &param)
+
+	var result rpc.GetEncryptedBalance_Result
+	isRegistered := false
+	
+	if err := rpc_client.Call("DERO.GetEncryptedBalance", rpc.GetEncryptedBalance_Params{Address: param, TopoHeight: -1}, &result); err == nil {
+		isRegistered = true
+	}
+
+	data := map[string]interface{}{}
+	fill_common_info(data, false)
+	data["address"] = param
+	data["isRegistered"] = isRegistered
+
+	var err error
+	if err = all_templates.ExecuteTemplate(w, "address_check", data); err != nil {
+		goto exit_error
+	}
+
+	return
+
+exit_error:
+	fmt.Fprintf(w, "Error occurred err %s", err)
+}
+
 // root shows page 0
 func root_handler(w http.ResponseWriter, r *http.Request) {
 	logger.V(1).Info("Showing main page")
@@ -829,13 +858,19 @@ func search_handler(w http.ResponseWriter, r *http.Request) {
 	// we only want the single item.
 	value := strings.TrimSpace(values[0])
 	good := false
+	isAddress := false
 
 	// collect all the data afresh,  execute rpc to service
 	if err = rpc_client.Call("DERO.GetInfo", nil, &info); err != nil {
 		goto exit_error
 	}
 
-	if len(value) != 64 {
+	if len(value) == 66 || len(value) == 88 {
+		if _, err := rpc.NewAddress(value); err == nil {
+			good = true
+			isAddress = true
+		}
+	} else if len(value) != 64 {
 		if s, err := strconv.ParseInt(value, 10, 64); err == nil && s >= 0 && s <= info.TopoHeight {
 			good = true
 		}
@@ -851,7 +886,13 @@ func search_handler(w http.ResponseWriter, r *http.Request) {
 	// value should be either 64 hex chars or a topoheight which should be less than current topoheight
 
 	if good {
-		// check whether the page is block or tx or height
+		// check whether the page is address or block or tx or height
+		if isAddress {
+			logger.V(1).Info("Redirecting Dero address check page")
+			http.Redirect(w, r, "/address/"+value, 302)
+			return
+		}
+
 		var blinfo block_info
 		var tx txinfo
 		err := load_block_from_rpc(&blinfo, value, false)
