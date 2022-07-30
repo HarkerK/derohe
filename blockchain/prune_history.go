@@ -486,3 +486,63 @@ func clone_tree_changes(old_tree, new_tree, write_tree *graviton.Tree) {
 
 	graviton.Diff(old_tree, new_tree, nil, modify_handler, insert_handler)
 }
+
+func Prune_Orphans(height int64) (err error) {
+	current_path := filepath.Join(globals.GetDataDirectory())
+	old_path := filepath.Join(current_path, "orphans")
+	new_path := filepath.Join(current_path, "orphans_new")
+
+	store1, err := graviton.NewDiskStore(old_path)
+	if err != nil {
+		return err
+	}
+	ss1, err := store1.LoadSnapshot(0)
+	if err != nil {
+		return
+	}
+	tree1, err := ss1.GetTree("orphans")
+	if err != nil {
+		return
+	}
+
+	store2, err := graviton.NewDiskStore(new_path)
+	if err != nil {
+		return err
+	}
+	ss2, err := store2.LoadSnapshot(0)
+	if err != nil {
+		return
+	}
+	tree2, err := ss2.GetTree("orphans")
+	if err != nil {
+		return
+	}
+
+	c := tree1.Cursor()
+
+	for k, v, err := c.First(); err == nil; k, v, err = c.Next() {
+		h, err2 := deserializeHeight(k)
+		if err2 != nil {
+			continue
+		}
+
+		if h > height {
+			if err := tree2.Put(k, v); err != nil {
+				//return err
+				continue
+			}
+		}
+	}
+
+	if _, err = graviton.Commit(tree2); err != nil {
+		return
+	}
+
+	store1.Close()
+	store2.Close()
+
+	globals.Logger.Info("old orphan tree", "size", ByteCountIEC(DirSize(old_path)))
+	globals.Logger.Info("orphan tree after pruning", "size", ByteCountIEC(DirSize(new_path)))
+	os.RemoveAll(old_path)
+	return os.Rename(new_path, old_path)
+}

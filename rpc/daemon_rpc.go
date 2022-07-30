@@ -35,6 +35,7 @@ type BlockHeader_Print struct {
 	SideBlock     bool     `json:"sideblock"`
 	TXCount       int64    `json:"txcount"`
 	Miners        []string `json:"miners"` // note 1 part goes to integrator/remaining is distributed to all
+	Orphans       []string `json:"orphans"`
 
 	Reward    uint64   `json:"reward"`
 	Tips      []string `json:"tips"`
@@ -96,6 +97,18 @@ type (
 		Name    string `json:"name"`
 		Address string `json:"address"`
 		Status  string `json:"status"`
+	}
+)
+
+type (
+	AddressToName_Params struct {
+		Address    string `json:"address"`              // Address for look up
+		TopoHeight int64  `json:"topoheight,omitempty"` // lookup in reference to this topo height
+	} // no params
+	AddressToName_Result struct {
+		Address string   `json:"address"`
+		Names   []string `json:"names"`
+		Status  string   `json:"status"`
 	}
 )
 
@@ -321,3 +334,38 @@ type GasEstimate_Result struct {
 	GasStorage uint64 `json:"gasstorage"`
 	Status     string `json:"status"`
 }
+
+type (
+	GetMinerAddress_Params GetBlock_Params
+	GetMinerAddress_Result struct {
+		MinerAddresses []string `json:"miner_addresses"`
+		Status         string   `json:"status"`
+	}
+)
+
+type (
+	GetOrphan_Params struct {
+		Height int64 `json:"height"`
+	}
+	GetOrphan_Result struct {
+		Orphans []string `json:"orphans"`
+		Status  string   `json:"status"`
+	}
+)
+
+type (
+	GetMiningStats_Params struct {
+		Address     string `json:"address"`
+		StartHeight int64  `json:"start_height"`
+		EndHeight   int64  `json:"end_height"`
+	}
+
+	GetMiningStats_Result struct {
+		Address        string  `json:"address"`
+		BlockCount     int64   `json:"block_count"`
+		MiniblockCount int64   `json:"miniblock_count"`
+		OrphanCount    int64   `json:"orphan_count"`
+		OrphanRate     float64 `json:"orphan_rate"`
+		Status         string  `json:"status"`
+	}
+)

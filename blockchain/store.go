@@ -354,3 +354,53 @@ func (chain *Blockchain) Load_Complete_Block(blid crypto.Hash) (cbl *block.Compl
 	}
 	return
 }
+
+func (chain *Blockchain) InitializeOrphanDB() (err error) {
+	path := filepath.Join(globals.GetDataDirectory(), "orphans")
+	chain.orphanDB, err = graviton.NewDiskStore(path)
+
+	return
+}
+
+func (chain *Blockchain) storeOrphan(key []byte, value []byte) (err error) {
+	ss, err := chain.orphanDB.LoadSnapshot(0)
+	if err != nil {
+		return
+	}
+
+	tree, err := ss.GetTree("orphans")
+	if err != nil {
+		return
+	}
+
+	err = tree.Put(key, value)
+	if err != nil {
+		return
+	}
+
+	_, err = graviton.Commit(tree)
+	if err != nil {
+		return
+	}
+
+	return
+}
+
+func (chain *Blockchain) getValueFromOrphanDB(key []byte) (value []byte, err error) {
+	ss, err := chain.orphanDB.LoadSnapshot(0)
+	if err != nil {
+		return
+	}
+
+	tree, err := ss.GetTree("orphans")
+	if err != nil {
+		return
+	}
+
+	value, err = tree.Get(key)
+	if err != nil {
+		return
+	}
+
+	return
+}

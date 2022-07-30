@@ -59,7 +59,7 @@ var command_line string = `derod
 DERO : A secure, private blockchain with smart-contracts
 
 Usage:
-  derod [--help] [--version] [--testnet] [--debug]  [--sync-node] [--timeisinsync] [--fastsync] [--socks-proxy=<socks_ip:port>] [--data-dir=<directory>] [--p2p-bind=<0.0.0.0:18089>] [--add-exclusive-node=<ip:port>]... [--add-priority-node=<ip:port>]... [--min-peers=<11>] [--max-peers=<100>] [--rpc-bind=<127.0.0.1:9999>] [--getwork-bind=<0.0.0.0:18089>] [--node-tag=<unique name>] [--prune-history=<50>] [--integrator-address=<address>] [--clog-level=1] [--flog-level=1]
+  derod [--help] [--version] [--testnet] [--debug]  [--sync-node] [--timeisinsync] [--fastsync] [--socks-proxy=<socks_ip:port>] [--data-dir=<directory>] [--p2p-bind=<0.0.0.0:18089>] [--add-exclusive-node=<ip:port>]... [--add-priority-node=<ip:port>]... [--min-peers=<11>] [--max-peers=<100>] [--rpc-bind=<127.0.0.1:9999>] [--getwork-bind=<0.0.0.0:18089>] [--node-tag=<unique name>] [--prune-history=<50>] [--integrator-address=<address>] [--clog-level=1] [--flog-level=1] [--store-orphans] [--prune-orphans=<100>]
   derod -h | --help
   derod --version
 
@@ -85,6 +85,8 @@ Options:
   --min-peers=<31>	  Node will try to maintain atleast this many connections to peers
   --max-peers=<101>	  Node will maintain maximim this many connections to peers and will stop accepting connections
   --prune-history=<50>	prunes blockchain history until the specific topo_height
+  --store-orphans  store orphan miniblock info in DB
+  --prune-orphans=<100> prunes orphan miniblocks info until the specific topo_height
 
   `
 
@@ -189,12 +191,41 @@ func main() {
 		}
 	}
 
+	prune_topo = int64(50)
+	if _, ok := globals.Arguments["--prune-orphans"]; ok && globals.Arguments["--prune-orphans"] != nil { // user specified a limit, use it if possible
+		i, err := strconv.ParseInt(globals.Arguments["--prune-orphans"].(string), 10, 64)
+		if err != nil {
+			logger.Error(err, "error Parsing --prune-orphans ")
+			return
+		} else {
+			if i <= 1 {
+				logger.Error(fmt.Errorf("--prune-orphans should be positive and more than 1"), "invalid argument")
+				return
+			} else {
+				prune_topo = i
+			}
+		}
+		logger.Info("will prune orphans till", "topo_height", prune_topo)
+
+		if err := blockchain.Prune_Orphans(prune_topo); err != nil {
+			logger.Error(err, "Error pruning orphans")
+			return
+		} else {
+			logger.Info("blockchain pruning orphans")
+
+		}
+	}
+
 	if _, ok := globals.Arguments["--timeisinsync"]; ok {
 		globals.TimeIsInSync = globals.Arguments["--timeisinsync"].(bool)
 	}
 
 	if _, ok := globals.Arguments["--integrator-address"]; ok {
 		params["--integrator-address"] = globals.Arguments["--integrator-address"]
+	}
+
+	if _, ok := globals.Arguments["--store-orphans"]; ok {
+		globals.StoreOrphans = globals.Arguments["--store-orphans"].(bool)
 	}
 
 	chain, err := blockchain.Blockchain_Start(params)
@@ -272,6 +303,7 @@ func main() {
 		last_mempool_tx_count := 0
 		last_regpool_tx_count := 0
 		last_second := int64(0)
+		orphanRate := float64(0)
 		for {
 			select {
 			case <-Exit_In_Progress:
@@ -317,8 +349,12 @@ func main() {
 
 					testnet_string += " " + strconv.Itoa(chain.MiniBlocks.Count()) + " " + globals.GetOffset().Round(time.Millisecond).String() + "|" + globals.GetOffsetNTP().Round(time.Millisecond).String() + "|" + globals.GetOffsetP2P().Round(time.Millisecond).String()
 
+					if orphanRate == 0 || our_height % 5 == 0 {
+						orphanRate = chain.GetOrphanRateLastN(100, chain.Get_Stable_Height())
+					}
+
 					miner_count := derodrpc.CountMiners()
-					l.SetPrompt(fmt.Sprintf("\033[1m\033[32mDERO HE: \033[0m"+color+"%d/%d [%d/%d] "+pcolor+"P %d TXp %d:%d \033[32mNW %s >MN %d %s>>\033[0m ", our_height, topo_height, best_height, best_topo_height, peer_count, mempool_tx_count, regpool_tx_count, hash_rate_string, miner_count, testnet_string))
+					l.SetPrompt(fmt.Sprintf("\033[1m\033[32mDERO HE: \033[0m"+color+"%d/%d [%d/%d] "+pcolor+"P %d TXp %d:%d \033[32mNW %s >MN %d %s %.1f%%>>\033[0m ", our_height, topo_height, best_height, best_topo_height, peer_count, mempool_tx_count, regpool_tx_count, hash_rate_string, miner_count, testnet_string, orphanRate))
 					l.Refresh()
 					last_second = time.Now().Unix()
 					last_our_height = our_height
@@ -927,6 +963,8 @@ restart_loop:
 			p2p.PeerList_Print()
 		case strings.ToLower(line) == "syncinfo", strings.ToLower(line) == "sync_info": // print active connections
 			p2p.Connection_Print()
+		case command == "orphan_info", command == "orphaninfo":
+			chain.OrphanInfo_Print(chain.Get_Stable_Height())
 		case strings.ToLower(line) == "bye":
 			fallthrough
 		case strings.ToLower(line) == "exit":

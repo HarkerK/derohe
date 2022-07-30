@@ -84,5 +84,18 @@ func GetBlockHeader(chain *blockchain.Blockchain, hash crypto.Hash) (result rpc.
 		}
 	}
 
+	orphans := chain.GetOrphan(result.Height)
+	if len(orphans) == 0 {
+		result.Orphans = []string{}
+		return
+	}
+
+	for _, o := range orphans {
+		if addr, err := rpc.NewAddressFromCompressedKeys(o[:]); err == nil {
+			addr.Mainnet = globals.IsMainnet()
+			result.Orphans = append(result.Orphans, addr.String())
+		}
+	}
+
 	return
 }

@@ -26,6 +26,7 @@ import "fmt"
 import "sync"
 import "time"
 import "bytes"
+import "encoding/binary"
 import "runtime/debug"
 import "strings"
 
@@ -98,6 +99,8 @@ type Blockchain struct {
 	Sync bool // whether the sync is active, used while bootstrapping
 
 	sync.RWMutex
+
+	orphanDB  *graviton.Store  // used to store orphan miniblock info
 }
 
 var logger logr.Logger = logr.Discard() // default discard all logs
@@ -122,6 +125,11 @@ func Blockchain_Start(params map[string]interface{}) (*Blockchain, error) {
 	}
 	chain.Tips = map[crypto.Hash]crypto.Hash{}
 	chain.MiniBlocks = block.CreateMiniBlockCollection()
+
+	if err = chain.InitializeOrphanDB(); err != nil {
+		logger.Error(err, "Failed to Initialize OrphanDB.")
+		return nil, err
+	}
 
 	var addr *rpc.Address
 	if params["--integrator-address"] == nil {
@@ -1110,8 +1118,20 @@ func (chain *Blockchain) Add_Complete_Block(cbl *block.Complete_Block) (err erro
 		block_logger.Info(fmt.Sprintf("Chain Height %d", chain.Get_Height()))
 	}
 
-	purge_count := chain.MiniBlocks.PurgeHeight(chain.Get_Stable_Height()) // purge all miniblocks upto this height
-	logger.V(2).Info("Purged miniblock", "count", purge_count)
+	if chain.Get_Height() > 0 {
+		stable_height := chain.Get_Stable_Height()
+		hash, _ := chain.Load_Block_Topological_order_at_index(stable_height)
+		oldBlock, _ := chain.Load_BL_FROM_ID(hash)
+
+		purge_count, lost_minis := chain.MiniBlocks.PurgeHeight(oldBlock, stable_height) // purge all miniblocks upto this height
+
+		logger.V(2).Info("Purged miniblock", "count", purge_count)
+
+		if globals.StoreOrphans && len(lost_minis) > 0 {
+			keys := chain.miniBlockKeys(lost_minis, chain.Get_Height())
+			chain.storeOrphan(serializeHeight(stable_height), serializeCompressedKeys(keys))
+		}
+	}
 
 	result = true
 
@@ -1430,7 +1450,7 @@ func (chain *Blockchain) Rewind_Chain(rewind_count int) (result bool) {
 		chain.Store.Topo_store.Clean(top_block_topo_index - i)
 	}
 
-	chain.MiniBlocks.PurgeHeight(0xffffffffffffff) // purge all miniblocks upto this height
+	chain.MiniBlocks.PurgeHeight(nil, 0xffffffffffffff) // purge all miniblocks upto this height
 
 	return true
 }
@@ -1614,4 +1634,242 @@ func (chain *Blockchain) flip_top() {
 		}
 	}
 
+}
+
+func (chain *Blockchain) miniBlockKeys(mbls []block.MiniBlock, chain_height int64) (keys [][33]byte) {
+	if toporecord, err := chain.Store.Topo_store.Read(chain_height); err == nil {
+		if ss, err := chain.Store.Balance_store.LoadSnapshot(toporecord.State_Version); err == nil {
+			if balance_tree, err := ss.GetTree(config.BALANCE_TREE); err == nil {
+
+				for _, mbl := range mbls {
+					bits, key, _, err := balance_tree.GetKeyValueFromHash(mbl.KeyHash[0:16])
+					if err != nil || bits >= 120 {
+						continue
+					}
+					var k [33]byte
+					copy(k[:], key)
+					keys = append(keys, k)
+				}
+			}
+		}
+	}
+	return
+}
+
+func serializeHeight(height int64) []byte {
+	var b bytes.Buffer
+	buf := make([]byte, binary.MaxVarintLen64)
+	n := binary.PutUvarint(buf, uint64(height))
+	b.Write(buf[:n])
+
+	return b.Bytes()
+}
+
+func serializeCompressedKeys(keys [][33]byte) []byte {
+	var b bytes.Buffer
+	buf := make([]byte, binary.MaxVarintLen64)
+
+	n := binary.PutUvarint(buf, uint64(len(keys)))
+	b.Write(buf[:n])
+
+	for _, k := range keys {
+		b.Write(k[:])
+	}
+
+	return b.Bytes()
+}
+
+func deserializeHeight(buf []byte) (int64, error) {
+	var err error
+	height, done := binary.Uvarint(buf)
+	if done <= 0 {
+		err = fmt.Errorf("invalid height")
+	}
+	return int64(height), err
+}
+
+func deserializeCompressedKeys(buf []byte) (keys [][33]byte, err error) {
+	done := 0
+	count, done := binary.Uvarint(buf)
+	if done <= 0 || done > 1 {
+		err = fmt.Errorf("invalid count")
+		return
+	}
+	buf = buf[done:]
+
+	for i := uint64(0); i < count; i++ {
+		var key [33]byte
+		copy(key[:], buf[:33])
+		keys = append(keys, key)
+
+		buf = buf[33:]
+	}
+
+	return
+}
+
+func (chain *Blockchain) OrphanInfo_Print(stableHeight int64) {
+	logger.Info("Orphan Miniblock Info")
+
+	ss, err := chain.orphanDB.LoadSnapshot(0)
+	if err != nil {
+		return
+	}
+
+	tree, err := ss.GetTree("orphans")
+	if err != nil {
+		return
+	}
+
+	c := tree.Cursor()
+
+	var totalCount uint64
+	var first int64
+	var hourlyCounts [24]uint64
+	var dailyCounts [7]uint64
+
+	for k, v, err := c.First(); err == nil; k, v, err = c.Next() {
+		height, err2 := deserializeHeight(k)
+		if err2 != nil {
+			continue
+		}
+		if first == 0 {
+			first = height
+		} else if height < first {
+			first = height
+		}
+
+		orphans, err2 := deserializeCompressedKeys(v)
+		if err2 != nil {
+			continue
+		}
+
+		totalCount += uint64(len(orphans))
+
+		var i int64
+		for i = 0; i < 24; i++ {
+			if stableHeight-200*(i+1) < height && height <= stableHeight-200*i {
+				hourlyCounts[i] += uint64(len(orphans))
+			}
+		}
+
+		for i = 0; i < 7; i++ {
+			if stableHeight-4800*(i+1) < height && height <= stableHeight-4800*i {
+				dailyCounts[i] += uint64(len(orphans))
+			}
+		}
+
+		//fmt.Printf("key=%d, value=%x\n", height, v)
+	}
+
+	if totalCount == 0 {
+		fmt.Println("\nNo data is available: 00%")
+		return
+	}
+
+	blockCount := uint64(stableHeight - first + 1)
+	totalMblsCount := blockCount*9 + totalCount
+	totalRate := float64(totalCount) / float64(totalMblsCount) * 100.0
+
+	fmt.Printf("\nTotal    : %6.2f%% [%d/%d] height %d to %d\n\n", totalRate, totalCount, totalMblsCount, first, stableHeight)
+
+	var i int64
+	for i = 0; i < int64(len(hourlyCounts)); i++ {
+		if blockCount >= 200*uint64(i+1) {
+			hourRate := float64(hourlyCounts[i]) / float64(1800+hourlyCounts[i]) * 100.0
+			fmt.Printf("Hourly %2d: %6.2f%% [%d/%d] height %d to %d\n", i+1, hourRate, hourlyCounts[i], (1800 + hourlyCounts[i]), stableHeight-200*(i+1)+1, stableHeight-200*i)
+		} else {
+			fmt.Printf("Hourly %2d: ------%% [--/--] height -- to --\n", i+1)
+		}
+	}
+
+	fmt.Println()
+
+	for i = 0; i < int64(len(dailyCounts)); i++ {
+		if blockCount >= 4800*uint64(i+1) {
+			dayRate := float64(dailyCounts[i]) / float64(43200+dailyCounts[i]) * 100.0
+			fmt.Printf("Daily  %2d: %6.2f%% [%d/%d] height %d to %d\n", i+1, dayRate, dailyCounts[i], (43200 + dailyCounts[i]), stableHeight-4800*(i+1)+1, stableHeight-4800*i)
+		} else {
+			fmt.Printf("Daily  %2d: ------%% [--/--] height -- to --\n", i+1)
+		}
+	}
+}
+
+func (chain *Blockchain) GetOrphan(height int64) [][33]byte {
+	v, err := chain.getValueFromOrphanDB(serializeHeight(height))
+	if err != nil {
+		return nil
+	}
+
+	orphans, err := deserializeCompressedKeys(v)
+	if err != nil {
+		return nil
+	}
+
+	return orphans
+}
+
+func (chain *Blockchain) GetMinerKeys(height int64) (keys [][33]byte, err error) {
+	if height > chain.Load_TOPO_HEIGHT() {
+		err = fmt.Errorf("user requested block at topoheight more than chain topoheight")
+		return
+	}
+
+	hash, err := chain.Load_Block_Topological_order_at_index(height)
+	if err != nil { // if err return err
+		err = fmt.Errorf("User requested %d height block, chain height %d but err occured %s", height, chain.Get_Height(), err)
+		return
+	}
+
+	bl, err := chain.Load_BL_FROM_ID(hash)
+	if err != nil { // if err return err
+		return
+	}
+
+	keys = chain.miniBlockKeys(bl.MiniBlocks, height)
+	keys = append(keys, bl.Miner_TX.MinerAddress)
+
+	return
+}
+
+func (chain *Blockchain) GetOrphanRateLastN(n int64, stableHeight int64) (rate float64) {
+	if n < 1 || stableHeight < 1 {
+		return
+	}
+
+	ss, err := chain.orphanDB.LoadSnapshot(0)
+	if err != nil {
+		return
+	}
+
+	tree, err := ss.GetTree("orphans")
+	if err != nil {
+		return
+	}
+
+	var sum uint64
+	var count int64
+	for i := stableHeight; i > (stableHeight - n) && i >= 0; i-- {
+		count++
+
+		v, err := tree.Get(serializeHeight(i))
+		if err != nil {
+			continue
+		}
+
+		orphans, err := deserializeCompressedKeys(v)
+		if err != nil {
+			continue
+		}
+
+		sum += uint64(len(orphans))
+	}
+
+	if sum == 0 {
+		return
+	}
+
+	rate = float64(sum) / float64(uint64(count * 9) + sum) * 100.0
+
+	return
 }
