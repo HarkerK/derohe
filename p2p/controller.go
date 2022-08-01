@@ -318,9 +318,14 @@ func connect_with_endpoint(endpoint string, sync_node bool) {
 		NextProtos: []string{"derohe-quic-test"},
 	}
 
+	// without increasing socket buffer size of the system, increasing window size will cause a negative effect
+	windowSize, _ := strconv.Atoi(os.Getenv("WINDOW_SIZE"))
+	if windowSize < 64 {
+		windowSize = 64
+	}
 	quicconfig := &quic.Config{
 		KeepAlivePeriod: 10*time.Second,
-		//InitialStreamReceiveWindow: (1 << 10) * 128,
+		InitialStreamReceiveWindow: (1 << 10) * uint64(windowSize),
 	}
 
 	//logger.V(4).Info("dialing", "endpoint", endpoint)
@@ -340,7 +345,7 @@ func connect_with_endpoint(endpoint string, sync_node bool) {
 		//logger.V(3).Error(err, "Dial failed", "endpoint", endpoint)
 		logger.V(3).Info("Dial failed", "endpoint", endpoint, "error", err)
 		Peer_SetFail(ParseIPNoError(remote_ip.String())) // update peer list as we see
-		_ = session.CloseWithError(0, "")
+		session.CloseWithError(0, "")
 		return
 	}
 
@@ -500,9 +505,14 @@ func P2P_Server_v2() {
 		NextProtos: []string{"derohe-quic-test"},
 	}
 
+	// without increasing socket buffer size of the system, increasing window size will cause a negative effect
+	windowSize, _ := strconv.Atoi(os.Getenv("WINDOW_SIZE"))
+	if windowSize < 64 {
+		windowSize = 64
+	}
 	quicconfig := &quic.Config{
 		KeepAlivePeriod: 10*time.Second,
-		//InitialStreamReceiveWindow: (1 << 10) * 128,
+		InitialStreamReceiveWindow: (1 << 10) * uint64(windowSize),
 	}
 
 	l, err := quic.ListenAddr(default_address, tlsconfig, quicconfig)
@@ -598,21 +608,13 @@ func set_handler(base interface{}, methodname string, handler interface{}) {
 }
 
 func getc(client *rpc2.Client) *Connection {
-	/*
-	if ci, found := client.State.Get("c"); found {
-		return ci.(*Connection)
-	} else {
-		//panic("no connection attached") // automatically handled by higher layers
-		return nil
-	}
-	*/
-	// try to get connection a few times because sometimes handshake starts before setting state
-	for i :=0 ; i < 4; i++ {
+	// try to get connection a few times because sometimes handshake starts before state is set
+	for i :=0 ; i < 100; i++ {
 		if ci, found := client.State.Get("c"); found {
 			return ci.(*Connection)
 		}
-		//logger.V(4).Info("connection state not found")
-		time.Sleep(100 * time.Millisecond)
+		//logger.V(4).Info("connection state is not found")
+		time.Sleep(10 * time.Millisecond)
 	}
 	return nil
 }
