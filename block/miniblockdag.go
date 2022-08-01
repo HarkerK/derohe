@@ -38,14 +38,12 @@ func (c *MiniBlocksCollection) PurgeHeight(oldBlock *Block, height int64) (purge
 	c.Lock()
 	defer c.Unlock()
 
-	for k, _ := range c.Collection {
+	for k, mbls := range c.Collection {
 		if k.Height <= uint64(height) {
 			purge_count++
 
 			if oldBlock != nil {
-				toPurge := c.Collection[k]
-				matches := 0
-				for _, mbl := range toPurge {
+				for _, mbl := range mbls {
 					match := false
 					for _, mbl2 := range oldBlock.MiniBlocks {
 						if mbl.Height == mbl2.Height && mbl.Timestamp == mbl2.Timestamp && mbl.Final == mbl2.Final {
@@ -57,7 +55,6 @@ func (c *MiniBlocksCollection) PurgeHeight(oldBlock *Block, height int64) (purge
 								}
 							}
 							if match {
-								matches++
 								break
 							}
 						}

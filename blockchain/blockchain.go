@@ -1120,16 +1120,26 @@ func (chain *Blockchain) Add_Complete_Block(cbl *block.Complete_Block) (err erro
 
 	if chain.Get_Height() > 0 {
 		stable_height := chain.Get_Stable_Height()
-		hash, _ := chain.Load_Block_Topological_order_at_index(stable_height)
-		oldBlock, _ := chain.Load_BL_FROM_ID(hash)
 
-		purge_count, lost_minis := chain.MiniBlocks.PurgeHeight(oldBlock, stable_height) // purge all miniblocks upto this height
+		if globals.StoreOrphans {
+			hash, _ := chain.Load_Block_Topological_order_at_index(stable_height)
+			oldBlock, _ := chain.Load_BL_FROM_ID(hash)
 
-		logger.V(2).Info("Purged miniblock", "count", purge_count)
+			purge_count, lost_minis := chain.MiniBlocks.PurgeHeight(oldBlock, stable_height) // purge all miniblocks upto this height
 
-		if globals.StoreOrphans && len(lost_minis) > 0 {
-			keys := chain.miniBlockKeys(lost_minis, chain.Get_Height())
-			chain.storeOrphan(serializeHeight(stable_height), serializeCompressedKeys(keys))
+			logger.V(2).Info("Purged miniblock", "count", purge_count)
+
+			go func() {
+				if len(lost_minis) > 0 {
+					keys := chain.miniBlockMinerKeys(lost_minis, chain.Get_Height())
+					chain.storeOrphan(serializeHeight(stable_height), serializeCompressedKeys(keys))
+				}
+			}()
+
+		} else {
+			purge_count, _ := chain.MiniBlocks.PurgeHeight(nil, stable_height) // purge all miniblocks upto this height
+
+			logger.V(2).Info("Purged miniblock", "count", purge_count)
 		}
 	}
 
@@ -1636,7 +1646,7 @@ func (chain *Blockchain) flip_top() {
 
 }
 
-func (chain *Blockchain) miniBlockKeys(mbls []block.MiniBlock, chain_height int64) (keys [][33]byte) {
+func (chain *Blockchain) miniBlockMinerKeys(mbls []block.MiniBlock, chain_height int64) (keys [][33]byte) {
 	if toporecord, err := chain.Store.Topo_store.Read(chain_height); err == nil {
 		if ss, err := chain.Store.Balance_store.LoadSnapshot(toporecord.State_Version); err == nil {
 			if balance_tree, err := ss.GetTree(config.BALANCE_TREE); err == nil {
@@ -1826,7 +1836,7 @@ func (chain *Blockchain) GetMinerKeys(height int64) (keys [][33]byte, err error)
 		return
 	}
 
-	keys = chain.miniBlockKeys(bl.MiniBlocks, height)
+	keys = chain.miniBlockMinerKeys(bl.MiniBlocks, height)
 	keys = append(keys, bl.Miner_TX.MinerAddress)
 
 	return
@@ -1849,7 +1859,7 @@ func (chain *Blockchain) GetOrphanRateLastN(n int64, stableHeight int64) (rate f
 
 	var sum uint64
 	var count int64
-	for i := stableHeight; i > (stableHeight - n) && i >= 0; i-- {
+	for i := stableHeight; i > (stableHeight - n) && i > 0; i-- {
 		count++
 
 		v, err := tree.Get(serializeHeight(i))
@@ -1863,10 +1873,6 @@ func (chain *Blockchain) GetOrphanRateLastN(n int64, stableHeight int64) (rate f
 		}
 
 		sum += uint64(len(orphans))
-	}
-
-	if sum == 0 {
-		return
 	}
 
 	rate = float64(sum) / float64(uint64(count * 9) + sum) * 100.0

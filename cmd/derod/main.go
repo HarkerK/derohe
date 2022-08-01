@@ -349,7 +349,7 @@ func main() {
 
 					testnet_string += " " + strconv.Itoa(chain.MiniBlocks.Count()) + " " + globals.GetOffset().Round(time.Millisecond).String() + "|" + globals.GetOffsetNTP().Round(time.Millisecond).String() + "|" + globals.GetOffsetP2P().Round(time.Millisecond).String()
 
-					if orphanRate == 0 || our_height % 5 == 0 {
+					if globals.StoreOrphans && (orphanRate == 0 || our_height % 5 == 0) {
 						orphanRate = chain.GetOrphanRateLastN(100, chain.Get_Stable_Height())
 					}
 
