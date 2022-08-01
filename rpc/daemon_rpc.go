@@ -362,6 +362,8 @@ type (
 
 	GetMiningStats_Result struct {
 		Address        string  `json:"address"`
+		StartHeight    int64   `json:"start_height"`
+		EndHeight      int64   `json:"end_height"`
 		BlockCount     int64   `json:"block_count"`
 		MiniblockCount int64   `json:"miniblock_count"`
 		OrphanCount    int64   `json:"orphan_count"`

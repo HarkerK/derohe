@@ -21,9 +21,25 @@ func GetMiningStats(ctx context.Context, p rpc.GetMiningStats_Params) (result rp
 		return
 	}
 
-	if p.EndHeight > chain.Get_Stable_Height() {
-		err = fmt.Errorf("user requested block at height more than chain stable height")
+	StableHeight := chain.Get_Stable_Height()
+
+	if p.EndHeight > StableHeight {
+		p.EndHeight = StableHeight
+	}
+
+	// limit request
+	if p.EndHeight-p.StartHeight >= 4800 {
+		err = fmt.Errorf("request limit is 4800 blocks (1 day)")
 		return
+	}
+
+	// if both Start Height and End Height are 0, give last 1 day (4800 blocks) data
+	if p.StartHeight == 0 && p.EndHeight == 0 {
+		p.StartHeight = StableHeight - 4800 - 1
+		if p.StartHeight < 0 {
+			p.StartHeight = 0
+		}
+		p.EndHeight = StableHeight
 	}
 
 	var addr *rpc.Address
@@ -60,6 +76,8 @@ func GetMiningStats(ctx context.Context, p rpc.GetMiningStats_Params) (result rp
 	}
 
 	result.Address = addr.String()
+	result.StartHeight = p.StartHeight
+	result.EndHeight = p.EndHeight
 	result.OrphanRate = float64(result.OrphanCount) / float64(result.MiniblockCount+result.OrphanCount) * 100
 	result.Status = "OK"
 	err = nil
