@@ -60,6 +60,7 @@ var iterations int = 100
 var max_pow_size int = 819200 //astrobwt.MAX_LENGTH
 var wallet_address string
 var daemon_rpc_address string
+var failover_rpc_address string
 
 var counter uint64
 var hash_rate uint64
@@ -77,7 +78,7 @@ ONE CPU, ONE VOTE.
 http://wiki.dero.io
 
 Usage:
-  dero-miner  --wallet-address=<wallet_address> [--daemon-rpc-address=<minernode1.dero.live:10100>] [--mining-threads=<threads>] [--testnet] [--debug]
+  dero-miner  --wallet-address=<wallet_address> [--daemon-rpc-address=<minernode1.dero.live:10100>] [--mining-threads=<threads>] [--testnet] [--debug] [--failover-rpc-address=<89.38.99.117:10100>]
   dero-miner --bench 
   dero-miner -h | --help
   dero-miner --version
@@ -89,6 +90,7 @@ Options:
   --daemon-rpc-address=<127.0.0.1:10102>    Miner will connect to daemon RPC on this port (default minernode1.dero.live:10100).
   --wallet-address=<wallet_address>    This address is rewarded when a block is mined sucessfully.
   --mining-threads=<threads>         Number of CPU threads for mining [default: ` + fmt.Sprintf("%d", runtime.GOMAXPROCS(0)) + `]
+  --failover-rpc-address=<89.38.99.117:10100> Failover daemon RPC address
 
 Example Mainnet: ./dero-miner-linux-amd64 --wallet-address dero1qy0ehnqjpr0wxqnknyc66du2fsxyktppkr8m8e6jvplp954klfjz2qqhmy4zf --daemon-rpc-address=minernode1.dero.live:10100
 Example Testnet: ./dero-miner-linux-amd64 --wallet-address deto1qy0ehnqjpr0wxqnknyc66du2fsxyktppkr8m8e6jvplp954klfjz2qqdzcd8p --daemon-rpc-address=127.0.0.1:40402 
@@ -157,12 +159,20 @@ func main() {
 
 	if !globals.Arguments["--testnet"].(bool) {
 		daemon_rpc_address = "minernode1.dero.live:10100"
+		failover_rpc_address = "89.38.99.117:10100"
 	} else {
 		daemon_rpc_address = "127.0.0.1:10100"
 	}
 
 	if globals.Arguments["--daemon-rpc-address"] != nil {
 		daemon_rpc_address = globals.Arguments["--daemon-rpc-address"].(string)
+		if daemon_rpc_address != "minernode1.dero.live:10100" {
+			failover_rpc_address = "minernode1.dero.live:10100"
+		}
+	}
+
+	if globals.Arguments["--failover-rpc-address"] != nil {
+		failover_rpc_address = globals.Arguments["--failover-rpc-address"].(string)
 	}
 
 	threads = runtime.GOMAXPROCS(0)
@@ -400,10 +410,24 @@ var connection_mutex sync.Mutex
 
 func getwork(wallet_address string) {
 	var err error
+	daemon_addr := daemon_rpc_address
+	isFailover := false
+	failCount := 0
 
 	for {
-
-		u := url.URL{Scheme: "wss", Host: daemon_rpc_address, Path: "/ws/" + wallet_address}
+		if failCount >= 6 {
+			if isFailover {
+				daemon_addr = daemon_rpc_address
+				failCount = 0
+				isFailover = !isFailover
+			} else {
+				daemon_addr = failover_rpc_address
+				failCount = 0
+				isFailover = !isFailover
+			}
+		}
+		
+		u := url.URL{Scheme: "wss", Host: daemon_addr, Path: "/ws/" + wallet_address}
 		logger.Info("connecting to ", "url", u.String())
 
 		dialer := websocket.DefaultDialer
@@ -412,12 +436,14 @@ func getwork(wallet_address string) {
 		}
 		connection, _, err = websocket.DefaultDialer.Dial(u.String(), nil)
 		if err != nil {
-			logger.Error(err, "Error connecting to server", "server adress", daemon_rpc_address)
-			logger.Info("Will try in 10 secs", "server adress", daemon_rpc_address)
+			logger.Error(err, "Error connecting to server", "server adress", daemon_addr)
+			logger.Info("Will try in 10 secs", "server adress", daemon_addr)
 			time.Sleep(10 * time.Second)
+			failCount++
 
 			continue
 		}
+		
 
 		var result rpc.GetBlockTemplate_Result
 	wait_for_another_job:
