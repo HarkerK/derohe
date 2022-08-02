@@ -1743,6 +1743,11 @@ func (chain *Blockchain) OrphanInfo_Print(stableHeight int64) {
 		if err2 != nil {
 			continue
 		}
+
+		if height == stableHeight {
+			continue
+		}
+
 		if first == 0 {
 			first = height
 		} else if height < first {
@@ -1758,18 +1763,16 @@ func (chain *Blockchain) OrphanInfo_Print(stableHeight int64) {
 
 		var i int64
 		for i = 0; i < 24; i++ {
-			if stableHeight-200*(i+1) < height && height <= stableHeight-200*i {
+			if stableHeight-200*(i+1) <= height && height < stableHeight-200*i {
 				hourlyCounts[i] += uint64(len(orphans))
 			}
 		}
 
 		for i = 0; i < 7; i++ {
-			if stableHeight-4800*(i+1) < height && height <= stableHeight-4800*i {
+			if stableHeight-4800*(i+1) <= height && height < stableHeight-4800*i {
 				dailyCounts[i] += uint64(len(orphans))
 			}
 		}
-
-		//fmt.Printf("key=%d, value=%x\n", height, v)
 	}
 
 	if totalCount == 0 {
@@ -1777,17 +1780,17 @@ func (chain *Blockchain) OrphanInfo_Print(stableHeight int64) {
 		return
 	}
 
-	blockCount := uint64(stableHeight - first + 1)
+	blockCount := uint64(stableHeight - first)
 	totalMblsCount := blockCount*9 + totalCount
 	totalRate := float64(totalCount) / float64(totalMblsCount) * 100.0
 
-	fmt.Printf("\nTotal    : %6.2f%% [%d/%d] height %d to %d\n\n", totalRate, totalCount, totalMblsCount, first, stableHeight)
+	fmt.Printf("\nTotal    : %6.2f%% [%d/%d] height %d to %d\n\n", totalRate, totalCount, totalMblsCount, first, stableHeight-1)
 
 	var i int64
 	for i = 0; i < int64(len(hourlyCounts)); i++ {
 		if blockCount >= 200*uint64(i+1) {
 			hourRate := float64(hourlyCounts[i]) / float64(1800+hourlyCounts[i]) * 100.0
-			fmt.Printf("Hourly %2d: %6.2f%% [%d/%d] height %d to %d\n", i+1, hourRate, hourlyCounts[i], (1800 + hourlyCounts[i]), stableHeight-200*(i+1)+1, stableHeight-200*i)
+			fmt.Printf("Hourly %2d: %6.2f%% [%d/%d] height %d to %d\n", i+1, hourRate, hourlyCounts[i], (1800 + hourlyCounts[i]), stableHeight-200*(i+1), stableHeight-200*i-1)
 		} else {
 			fmt.Printf("Hourly %2d: ------%% [--/--] height -- to --\n", i+1)
 		}
@@ -1798,7 +1801,7 @@ func (chain *Blockchain) OrphanInfo_Print(stableHeight int64) {
 	for i = 0; i < int64(len(dailyCounts)); i++ {
 		if blockCount >= 4800*uint64(i+1) {
 			dayRate := float64(dailyCounts[i]) / float64(43200+dailyCounts[i]) * 100.0
-			fmt.Printf("Daily  %2d: %6.2f%% [%d/%d] height %d to %d\n", i+1, dayRate, dailyCounts[i], (43200 + dailyCounts[i]), stableHeight-4800*(i+1)+1, stableHeight-4800*i)
+			fmt.Printf("Daily  %2d: %6.2f%% [%d/%d] height %d to %d\n", i+1, dayRate, dailyCounts[i], (43200 + dailyCounts[i]), stableHeight-4800*(i+1), stableHeight-4800*i-1)
 		} else {
 			fmt.Printf("Daily  %2d: ------%% [--/--] height -- to --\n", i+1)
 		}
@@ -1859,7 +1862,7 @@ func (chain *Blockchain) GetOrphanRateLastN(n int64, stableHeight int64) (rate f
 
 	var sum uint64
 	var count int64
-	for i := stableHeight; i > (stableHeight - n) && i > 0; i-- {
+	for i := stableHeight-1; i >= (stableHeight - n) && i > 0; i-- {
 		count++
 
 		v, err := tree.Get(serializeHeight(i))

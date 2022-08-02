@@ -21,8 +21,9 @@ func GetOrphan(ctx context.Context, p rpc.GetOrphan_Params) (result rpc.GetOrpha
 		return
 	}
 
-	if p.Height > chain.Get_Stable_Height() {
-		err = fmt.Errorf("user requested block at height more than chain stable height")
+	//if p.Height > chain.Get_Stable_Height() {
+	if p.Height >= chain.Get_Stable_Height() { // have a margin because miniblocks might not be purged yet
+		err = fmt.Errorf("user requested block at height more than (or equal to) chain stable height")
 		return
 	}
 

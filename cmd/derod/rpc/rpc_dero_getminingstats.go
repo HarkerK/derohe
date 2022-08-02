@@ -23,8 +23,8 @@ func GetMiningStats(ctx context.Context, p rpc.GetMiningStats_Params) (result rp
 
 	StableHeight := chain.Get_Stable_Height()
 
-	if p.EndHeight > StableHeight {
-		p.EndHeight = StableHeight
+	if p.EndHeight >= StableHeight {
+		p.EndHeight = StableHeight - 1
 	}
 
 	// limit request
@@ -35,11 +35,11 @@ func GetMiningStats(ctx context.Context, p rpc.GetMiningStats_Params) (result rp
 
 	// if both Start Height and End Height are 0, give last 1 day (4800 blocks) data
 	if p.StartHeight == 0 && p.EndHeight == 0 {
-		p.StartHeight = StableHeight - 4800 - 1
+		p.StartHeight = StableHeight - 4800
 		if p.StartHeight < 0 {
 			p.StartHeight = 0
 		}
-		p.EndHeight = StableHeight
+		p.EndHeight = StableHeight - 1
 	}
 
 	var addr *rpc.Address
