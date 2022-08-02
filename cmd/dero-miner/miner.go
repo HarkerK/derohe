@@ -418,15 +418,13 @@ func getwork(wallet_address string) {
 		if failCount >= 6 {
 			if isFailover {
 				daemon_addr = daemon_rpc_address
-				failCount = 0
-				isFailover = !isFailover
 			} else {
 				daemon_addr = failover_rpc_address
-				failCount = 0
-				isFailover = !isFailover
 			}
+			failCount = 0
+			isFailover = !isFailover
 		}
-		
+
 		u := url.URL{Scheme: "wss", Host: daemon_addr, Path: "/ws/" + wallet_address}
 		logger.Info("connecting to ", "url", u.String())
 
@@ -443,7 +441,6 @@ func getwork(wallet_address string) {
 
 			continue
 		}
-		
 
 		var result rpc.GetBlockTemplate_Result
 	wait_for_another_job:
