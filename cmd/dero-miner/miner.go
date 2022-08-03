@@ -440,6 +440,8 @@ func getwork(wallet_address string) {
 			failCount++
 
 			continue
+		} else {
+			failCount = 0
 		}
 
 		var result rpc.GetBlockTemplate_Result
