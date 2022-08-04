@@ -19,6 +19,8 @@ package blockchain
 import "fmt"
 import "math/big"
 import "path/filepath"
+import "os"
+import "strconv"
 
 import "github.com/deroproject/derohe/globals"
 import "github.com/deroproject/derohe/block"
@@ -33,6 +35,11 @@ type storage struct {
 	Balance_store  *graviton.Store // stores most critical data, only history can be purged, its merkle tree is stored in the block
 	Block_tx_store storefs         // stores blocks which can be discarded at any time(only past but keep recent history for rollback)
 	Topo_store     storetopofs     // stores topomapping which can only be discarded by punching holes in the start of the file
+}
+
+type orphanStorage struct {
+	Store        *graviton.Store
+	FirstHeight  int64
 }
 
 func (s *storage) Initialize(params map[string]interface{}) (err error) {
@@ -355,15 +362,42 @@ func (chain *Blockchain) Load_Complete_Block(blid crypto.Hash) (cbl *block.Compl
 	return
 }
 
-func (chain *Blockchain) InitializeOrphanDB() (err error) {
+func (s *orphanStorage) InitializeOrphanDB() (err error) {
 	path := filepath.Join(globals.GetDataDirectory(), "orphans")
-	chain.orphanDB, err = graviton.NewDiskStore(path)
+	s.Store, err = graviton.NewDiskStore(path)
+	if err != nil {
+		return
+	}
+
+	s.FirstHeight = LoadOrphanFirstHeight()
 
 	return
 }
 
+func LoadOrphanFirstHeight () int64 {
+	filepath := filepath.Join(globals.GetDataDirectory(), "orphan_first_height.csv")
+	data, err := os.ReadFile(filepath)
+	if err != nil {
+		return 0
+	}
+
+	height, err := strconv.ParseInt(string(data), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return height
+}
+
+func (s *orphanStorage) writeFirstHeight (height int64) (err error) {
+	filepath := filepath.Join(globals.GetDataDirectory(), "orphan_first_height.csv")
+	
+	heightString := strconv.FormatInt(height, 10)
+
+	return os.WriteFile(filepath, []byte(heightString), 0644)
+}
+
 func (chain *Blockchain) storeOrphan(key []byte, value []byte) (err error) {
-	ss, err := chain.orphanDB.LoadSnapshot(0)
+	ss, err := chain.OrphanDB.Store.LoadSnapshot(0)
 	if err != nil {
 		return
 	}
@@ -387,7 +421,7 @@ func (chain *Blockchain) storeOrphan(key []byte, value []byte) (err error) {
 }
 
 func (chain *Blockchain) getValueFromOrphanDB(key []byte) (value []byte, err error) {
-	ss, err := chain.orphanDB.LoadSnapshot(0)
+	ss, err := chain.OrphanDB.Store.LoadSnapshot(0)
 	if err != nil {
 		return
 	}
@@ -403,4 +437,32 @@ func (chain *Blockchain) getValueFromOrphanDB(key []byte) (value []byte, err err
 	}
 
 	return
+}
+
+func (chain *Blockchain) GetOrphan(height int64) [][33]byte {
+	v, err := chain.getValueFromOrphanDB(serializeHeight(height))
+	if err != nil {
+		return nil
+	}
+
+	orphans, err := deserializeCompressedKeys(v)
+	if err != nil {
+		return nil
+	}
+
+	return orphans
+}
+
+func GetOrphan(tree *graviton.Tree, height int64) [][33]byte {
+	value, err := tree.Get(serializeHeight(height))
+	if err != nil {
+		return nil
+	}
+
+	orphans, err := deserializeCompressedKeys(value)
+	if err != nil {
+		return nil
+	}
+
+	return orphans
 }

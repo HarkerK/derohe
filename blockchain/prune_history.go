@@ -26,6 +26,7 @@ import "os"
 import "fmt"
 import "math/big"
 import "path/filepath"
+import "strconv"
 
 import "github.com/deroproject/derohe/config"
 import "github.com/deroproject/graviton"
@@ -518,17 +519,32 @@ func Prune_Orphans(height int64) (err error) {
 		return
 	}
 
-	c := tree1.Cursor()
+	var store storage
 
-	for k, v, err := c.First(); err == nil; k, v, err = c.Next() {
-		h, err2 := deserializeHeight(k)
-		if err2 != nil {
+	if store.Balance_store, err = graviton.NewDiskStore(filepath.Join(current_path, "balances")); err == nil {
+		if err = store.Topo_store.Open(current_path); err != nil {
+			return err
+		}
+	}
+
+	max_topoheight := store.Topo_store.Count()
+	var first int64
+
+	for i := int64(height)+1; i <= max_topoheight; i++ {
+		h := serializeHeight(i)
+		v, err := tree1.Get(h)
+		if err != nil {
 			continue
 		}
 
-		if h > height {
-			if err := tree2.Put(k, v); err != nil {
-				//return err
+		if i > height {
+			if first == 0 {
+				first = i
+			} else if i < first {
+				first = i
+			}
+
+			if err := tree2.Put(h, v); err != nil {
 				continue
 			}
 		}
@@ -540,6 +556,13 @@ func Prune_Orphans(height int64) (err error) {
 
 	store1.Close()
 	store2.Close()
+	
+	filepath := filepath.Join(current_path, "orphan_first_height.csv")
+
+	s := strconv.FormatInt(first, 10)
+	if err = os.WriteFile(filepath, []byte(s), 0644); err != nil {
+		return
+	}
 
 	globals.Logger.Info("old orphan tree", "size", ByteCountIEC(DirSize(old_path)))
 	globals.Logger.Info("orphan tree after pruning", "size", ByteCountIEC(DirSize(new_path)))

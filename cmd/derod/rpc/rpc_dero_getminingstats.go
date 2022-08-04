@@ -6,6 +6,7 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"github.com/deroproject/derohe/blockchain"
 	"github.com/deroproject/derohe/rpc"
 )
 
@@ -49,6 +50,16 @@ func GetMiningStats(ctx context.Context, p rpc.GetMiningStats_Params) (result rp
 	}
 	addr_raw := string(addr.Compressed())
 
+	ss, err := chain.OrphanDB.Store.LoadSnapshot(0)
+	if err != nil {
+		return
+	}
+
+	tree, err := ss.GetTree("orphans")
+	if err != nil {
+		return
+	}
+
 	var i int64
 	for i = p.StartHeight; i <= p.EndHeight; i++ {
 		mkeys, err := chain.GetMinerKeys(i)
@@ -66,7 +77,7 @@ func GetMiningStats(ctx context.Context, p rpc.GetMiningStats_Params) (result rp
 			}
 		}
 
-		orphans := chain.GetOrphan(i)
+		orphans := blockchain.GetOrphan(tree, i)
 
 		for _, orphan := range orphans {
 			if string(orphan[:]) == addr_raw {
