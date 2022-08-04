@@ -1,3 +1,10 @@
+### Dero HE with quic-go (Test)
+This uses [quic-go](https://github.com/lucas-clemente/quic-go) instead of kcp-go for P2P connection.
+
+This is my personal experiment for learning purpose.
+
+#### Todo
+
 ### Welcome to the DEROHE Testnet
 
 [Explorer](https://testnetexplorer.dero.io) [Source](https://github.com/deroproject/derohe) [Twitter](https://twitter.com/DeroProject) [Discord](https://discord.gg/H95TJDp) [Wiki](https://wiki.dero.io) [Github](https://github.com/deroproject/derohe) [DERO CryptoNote Mainnet Stats](http://network.dero.io) [Mainnet WebWallet](https://wallet.dero.io/) 

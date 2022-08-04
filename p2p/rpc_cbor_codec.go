@@ -4,7 +4,7 @@ package p2p
 import "fmt"
 import "bytes"
 import "io"
-import "net"
+//import "net"
 import "sync"
 import "time"
 import "github.com/cenkalti/rpc2"
@@ -12,6 +12,10 @@ import "encoding/binary"
 import "github.com/fxamacker/cbor/v2"
 
 import "github.com/deroproject/derohe/config" // only used get constants such as max data per frame
+
+import "github.com/lucas-clemente/quic-go"
+
+// only used get constants such as max data per frame
 
 //  it processes both
 type RequestResponse struct {
@@ -30,10 +34,9 @@ var bufPool = &sync.Pool{
 }
 
 // reads our data, length prefix blocks
-func Read_Data_Frame(r net.Conn, obj interface{}) error {
+func Read_Data_Frame(r quic.Stream, obj interface{}) error {
 	var frame_length_buf [4]byte
 
-	//connection.set_timeout()
 	r.SetReadDeadline(time.Now().Add(READ_TIMEOUT))
 	nbyte, err := io.ReadFull(r, frame_length_buf[:])
 	if err != nil {
@@ -72,7 +75,7 @@ func Read_Data_Frame(r net.Conn, obj interface{}) error {
 }
 
 // reads our data, length prefix blocks
-func Write_Data_Frame(w net.Conn, obj interface{}) error {
+func Write_Data_Frame(w quic.Stream, obj interface{}) error {
 	var frame_length_buf [4]byte
 	data_bytes, err := cbor.Marshal(obj)
 	if err != nil {
@@ -91,15 +94,15 @@ func Write_Data_Frame(w net.Conn, obj interface{}) error {
 
 // ClientCodec implements the rpc.ClientCodec interface for generic golang objects.
 type ClientCodec struct {
-	r net.Conn
+	r quic.Stream
 	sync.Mutex
 }
 
 // NewClientCodec returns a ClientCodec for communicating with the ServerCodec
 // on the other end of the conn.
 // to support deadlines we use net.conn
-func NewCBORCodec(conn net.Conn) *ClientCodec {
-	return &ClientCodec{r: conn}
+func NewCBORCodec(stream quic.Stream) *ClientCodec {
+	return &ClientCodec{r: stream}
 }
 
 // ReadResponseHeader reads a 4 byte length from the connection and decodes that many
