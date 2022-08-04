@@ -59,11 +59,11 @@ const MAX_RINGSIZE = 128 // <= 128,  ringsize will be accepted
 const PREMINE uint64 = 1228125400000 // this is total supply of old chain ( considering both chain will be running together for some time)
 
 type SettingsStruct struct {
-	MAINNET_BOOTSTRAP_DIFFICULTY uint64 `env:"MAINNET_BOOTSTRAP_DIFFICULTY" envDefault:"10000"` // mainnet bootstrap is 10 MH/s
-	MAINNET_MINIMUM_DIFFICULTY   uint64 `env:"MAINNET_MINIMUM_DIFFICULTY" envDefault:"500"`     // mainnet minimum is 100 KH/s
+	MAINNET_BOOTSTRAP_DIFFICULTY uint64 `env:"MAINNET_BOOTSTRAP_DIFFICULTY" envDefault:"10000000"` // mainnet bootstrap is 10 MH/s
+	MAINNET_MINIMUM_DIFFICULTY   uint64 `env:"MAINNET_MINIMUM_DIFFICULTY" envDefault:"100000"`     // mainnet minimum is 100 KH/s
 
 	TESTNET_BOOTSTRAP_DIFFICULTY uint64 `env:"TESTNET_BOOTSTRAP_DIFFICULTY" envDefault:"10000"`
-	TESTNET_MINIMUM_DIFFICULTY   uint64 `env:"TESTNET_MINIMUM_DIFFICULTY" envDefault:"500"`
+	TESTNET_MINIMUM_DIFFICULTY   uint64 `env:"TESTNET_MINIMUM_DIFFICULTY" envDefault:"10000"`
 }
 
 var Settings SettingsStruct
@@ -96,14 +96,14 @@ type CHAIN_CONFIG struct {
 }
 
 var Mainnet = CHAIN_CONFIG{Name: "mainnet",
-	Network_ID:              uuid.FromBytesOrNil([]byte{0x59, 0xd7, 0xf7, 0xe9, 0xdd, 0x48, 0xd5, 0xfd, 0x13, 0x0a, 0xf6, 0xe0, 0x9a, 0xee, 0xee, 0xee}),
-	GETWORK_Default_Port:    30300,
-	RPC_Default_Port:        30302,
-	Wallet_RPC_Default_Port: 30303,
+	Network_ID:              uuid.FromBytesOrNil([]byte{0x59, 0xd7, 0xf7, 0xe9, 0xdd, 0x48, 0xd5, 0xfd, 0x13, 0x0a, 0xf6, 0xe0, 0x9a, 0x44, 0x41, 0x0}),
+	GETWORK_Default_Port:    10100,
+	RPC_Default_Port:        10102,
+	Wallet_RPC_Default_Port: 10103,
 	Dev_Address:             "dero1qykyta6ntpd27nl0yq4xtzaf4ls6p5e9pqu0k2x4x3pqq5xavjsdxqgny8270",
-	HF1_HEIGHT:              0,
-	HF2_HEIGHT:              0,
-	MAJOR_HF2_HEIGHT:        4,
+	HF1_HEIGHT:              21480,
+	HF2_HEIGHT:              29000,
+	MAJOR_HF2_HEIGHT:        481600,
 
 	Genesis_Tx: "" +
 		"01" + // version
@@ -116,10 +116,10 @@ var Mainnet = CHAIN_CONFIG{Name: "mainnet",
 }
 
 var Testnet = CHAIN_CONFIG{Name: "testnet", // testnet will always have last 3 bytes 0
-	Network_ID:              uuid.FromBytesOrNil([]byte{0x59, 0xd7, 0xf7, 0xe9, 0xdd, 0x48, 0xd5, 0xfd, 0x13, 0x0a, 0xf6, 0xe0, 0x87, 0xff, 0xff, 0xff}),
-	GETWORK_Default_Port:    50500,
-	RPC_Default_Port:        50502,
-	Wallet_RPC_Default_Port: 50503,
+	Network_ID:              uuid.FromBytesOrNil([]byte{0x59, 0xd7, 0xf7, 0xe9, 0xdd, 0x48, 0xd5, 0xfd, 0x13, 0x0a, 0xf6, 0xe0, 0x87, 0x00, 0x00, 0x00}),
+	GETWORK_Default_Port:    10100,
+	RPC_Default_Port:        40402,
+	Wallet_RPC_Default_Port: 40403,
 
 	Dev_Address:      "deto1qy0ehnqjpr0wxqnknyc66du2fsxyktppkr8m8e6jvplp954klfjz2qqdzcd8p",
 	HF1_HEIGHT:       0, // on testnet apply at genesis
@@ -136,4 +136,4 @@ var Testnet = CHAIN_CONFIG{Name: "testnet", // testnet will always have last 3 b
 }
 
 // mainnet has a remote daemon node, which can be used be default, if user provides a  --remote flag
-const REMOTE_DAEMON = "195.170.172.140" // "https://rwallet.dero.live"
+const REMOTE_DAEMON = "89.38.99.117" // "https://rwallet.dero.live"

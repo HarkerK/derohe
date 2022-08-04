@@ -75,8 +75,10 @@ type Connection struct {
 	State                 uint32 // state of the connection
 	Syncing               int32  // denotes whether we are syncing and thus stop pinging
 
-	Client  *rpc2.Client
-	Conn    *QuicConn
+	Client      *rpc2.Client
+	Conn        *QuicConn
+	KcpConn     *KcpConn
+	ConnType    uint32  // 0: Quic, 1: KCP
 
 	StateHash crypto.Hash // statehash at the top
 
@@ -114,6 +116,11 @@ type QuicConn struct {
 	quic.Stream
 }
 
+type KcpConn struct {
+	Conn    net.Conn
+	ConnTls net.Conn
+}
+
 func Address(c *Connection) string {
 	if c.Addr == nil {
 		return ""
@@ -125,7 +132,13 @@ func (c *Connection) exit() {
 	defer globals.Recover(0)
 	c.onceexit.Do(func() {
 		c.Client.Close()
-		c.Conn.Connection.CloseWithError(0, "")
+		
+		switch c.ConnType {
+		case 0:
+			c.Conn.Connection.CloseWithError(0, "")
+		case 1:
+			c.KcpConn.Conn.Close()
+		}
 	})
 
 }

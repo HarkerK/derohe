@@ -27,7 +27,7 @@ import "strings"
 import "math/big"
 import "strconv"
 
-//import "crypto/sha1"
+import "crypto/sha1"
 import "crypto/ecdsa"
 import "crypto/elliptic"
 
@@ -45,8 +45,8 @@ import "github.com/deroproject/derohe/globals"
 import "github.com/deroproject/derohe/metrics"
 import "github.com/deroproject/derohe/blockchain"
 
-//import "github.com/xtaci/kcp-go/v5"
-//import "golang.org/x/crypto/pbkdf2"
+import "github.com/xtaci/kcp-go/v5"
+import "golang.org/x/crypto/pbkdf2"
 import "golang.org/x/time/rate"
 
 import "github.com/cenkalti/rpc2"
@@ -335,8 +335,10 @@ func connect_with_endpoint(endpoint string, sync_node bool) {
     session, err := quic.DialAddrContext(ctx, remote_ip.String(), tlsconfig, quicconfig)
 	if err != nil {
 		//logger.V(3).Error(err, "Dial failed", "endpoint", endpoint)
-		logger.V(3).Info("Dial failed", "endpoint", endpoint, "error", err)
-		Peer_SetFail(ParseIPNoError(remote_ip.String())) // update peer list as we see
+		//logger.V(3).Info("Dial failed", "endpoint", endpoint, "error", err)
+		//Peer_SetFail(ParseIPNoError(remote_ip.String())) // update peer list as we see
+		logger.V(4).Info("Quic dial failed, dialing over KCP", "endpoint", endpoint, "error", err)
+		dialKCP(remote_ip, sync_node)
 		return //nil, fmt.Errorf("Dial failed err %s", err.Error())
 	}
 	
@@ -772,4 +774,71 @@ func (conn *QuicConn) isActive() bool {
 	default:
 		return true
 	}
+}
+
+func dialKCP(remote_ip *net.UDPAddr, sync_node bool) {
+	var masterkey = pbkdf2.Key(globals.Config.Network_ID.Bytes(), globals.Config.Network_ID.Bytes(), 1024, 32, sha1.New)
+	var blockcipher, _ = kcp.NewAESBlockCrypt(masterkey)
+	conn, err := kcp.DialWithOptions(remote_ip.String(), blockcipher, 10, 3)
+	if err != nil {
+		logger.V(3).Error(err, "Dial failed", "endpoint", remote_ip.String())
+		Peer_SetFail(ParseIPNoError(remote_ip.String())) // update peer list as we see
+		conn.Close()
+		return //nil, fmt.Errorf("Dial failed err %s", err.Error())
+	}
+
+	tunekcp(conn) // set tunings for low latency
+
+	// TODO we need to choose fastest cipher here ( so both clients/servers are not loaded)
+	conntls := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
+	kcpconn := &KcpConn{conn, conntls}
+	process_outgoing_connection_kcp(kcpconn, remote_ip, false, sync_node)
+}
+
+func process_outgoing_connection_kcp(kcpconn *KcpConn, remote_addr net.Addr, incoming, sync_node bool) {
+	defer globals.Recover(0)
+
+	client := rpc2.NewClientWithCodec(NewCBORCodecKCP(kcpconn.ConnTls))
+
+	c := &Connection{Client: client, KcpConn: kcpconn, Addr: remote_addr, State: HANDSHAKE_PENDING, Incoming: incoming, SyncNode: sync_node, ConnType: 1}
+	defer c.exit()
+	c.logger = logger.WithName("outgoing").WithName(remote_addr.String())
+	set_handlers(client)
+
+	client.State = rpc2.NewState()
+	client.State.Set("c", c)
+
+	go func() {
+		time.Sleep(2 * time.Second)
+		c.dispatch_test_handshake()
+	}()
+
+	//	c.logger.V(4).Info("client running loop")
+	client.Run() // see the original
+
+	c.logger.V(4).Info("process_connection finished")
+}
+
+func tunekcp(conn *kcp.UDPSession) {
+	conn.SetACKNoDelay(true)
+	/*
+	if os.Getenv("TURBO") == "0" {
+		conn.SetNoDelay(1, 10, 2, 1) // tuning paramters for local stack for fast retransmission stack
+	} else {
+		conn.SetNoDelay(0, 40, 0, 0) // tuning paramters for local
+	}
+	size := 1 * 1024 * 1024 // set the buffer size max possible upto 1 MB, default is 1 MB
+	if os.Getenv("UDP_READ_BUF_CONN") != "" {
+		size, _ = strconv.Atoi(os.Getenv("UDP_READ_BUF_CONN"))
+		if size <= 64*1024 {
+			size = 64 * 1024
+		}
+	}
+	for size >= 64*1024 {
+		if err := conn.SetReadBuffer(size); err == nil {
+			break
+		}
+		size = size - (64 * 1024)
+	}
+	*/
 }
