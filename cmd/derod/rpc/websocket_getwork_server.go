@@ -208,6 +208,7 @@ func SendJob() {
 
 func newUpgrader() *websocket.Upgrader {
 	u := websocket.NewUpgrader()
+	u.KeepaliveTime = 240 * time.Hour
 
 	u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		// echo
