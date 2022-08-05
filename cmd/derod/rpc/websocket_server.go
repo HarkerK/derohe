@@ -298,7 +298,8 @@ var internal_server = server.NewLocal(historical_apis, nil) // uses traditional 
 var bridge = jhttp.NewBridge(internal_server.Client)
 
 */
-var historical_apis = handler.Map{"getinfo": handler.New(GetInfo),
+var historical_apis = handler.Map{
+	"getinfo":                    handler.New(GetInfo),
 	"get_info":                   handler.New(GetInfo), // this is just an alias to above
 	"getblock":                   handler.New(GetBlock),
 	"getblockheaderbytopoheight": handler.New(GetBlockHeaderByTopoHeight),
@@ -315,7 +316,11 @@ var historical_apis = handler.Map{"getinfo": handler.New(GetInfo),
 	"getencryptedbalance":        handler.New(GetEncryptedBalance),
 	"getsc":                      handler.New(GetSC),
 	"getgasestimate":             handler.New(GetGasEstimate),
-	"nametoaddress":              handler.New(NameToAddress)}
+	"nametoaddress":              handler.New(NameToAddress),
+	"addresstoname":              handler.New(AddressToName),
+	"getorphan":                  handler.New(GetOrphan),
+	"getminingstats":             handler.New(GetMiningStats),
+}
 
 var servicemux = handler.ServiceMap{
 	"DERO": handler.Map{
@@ -338,6 +343,9 @@ var servicemux = handler.ServiceMap{
 		"GetSC":                      handler.New(GetSC),
 		"GetGasEstimate":             handler.New(GetGasEstimate),
 		"NameToAddress":              handler.New(NameToAddress),
+		"AddressToName":              handler.New(AddressToName),
+		"GetOrphan":                  handler.New(GetOrphan),
+		"GetMiningStats":             handler.New(GetMiningStats),
 	},
 	"DAEMON": handler.Map{
 		"Echo": handler.New(DAEMON_Echo),

@@ -31,20 +31,43 @@ func CreateMiniBlockCollection() *MiniBlocksCollection {
 }
 
 // purge all heights less than this height
-func (c *MiniBlocksCollection) PurgeHeight(height int64) (purge_count int) {
+func (c *MiniBlocksCollection) PurgeHeight(oldBlock *Block, height int64) (purge_count int, lost_minis []MiniBlock) {
 	if height < 0 {
 		return
 	}
 	c.Lock()
 	defer c.Unlock()
 
-	for k, _ := range c.Collection {
+	for k, mbls := range c.Collection {
 		if k.Height <= uint64(height) {
 			purge_count++
+
+			if oldBlock != nil {
+				for _, mbl := range mbls {
+					match := false
+					for _, mbl2 := range oldBlock.MiniBlocks {
+						if mbl.Height == mbl2.Height && mbl.Timestamp == mbl2.Timestamp && mbl.Final == mbl2.Final {
+							match = true
+							for i := 0; i < 16; i++ {
+								if mbl.KeyHash[i] != mbl2.KeyHash[i] {
+									match = false
+									break
+								}
+							}
+							if match {
+								break
+							}
+						}
+					}
+					if !match {
+						lost_minis = append(lost_minis, mbl)
+					}
+				}
+			}
 			delete(c.Collection, k)
 		}
 	}
-	return purge_count
+	return purge_count, lost_minis
 }
 
 func (c *MiniBlocksCollection) Count() int {

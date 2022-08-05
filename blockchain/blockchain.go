@@ -98,6 +98,8 @@ type Blockchain struct {
 	Sync bool // whether the sync is active, used while bootstrapping
 
 	sync.RWMutex
+
+	OrphanDB  orphanDB  // used to store orphan miniblock info
 }
 
 var logger logr.Logger = logr.Discard() // default discard all logs
@@ -122,6 +124,11 @@ func Blockchain_Start(params map[string]interface{}) (*Blockchain, error) {
 	}
 	chain.Tips = map[crypto.Hash]crypto.Hash{}
 	chain.MiniBlocks = block.CreateMiniBlockCollection()
+
+	if err = chain.OrphanDB.InitializeOrphanDB(); err != nil {
+		logger.Error(err, "Failed to Initialize OrphanDB.")
+		return nil, err
+	}
 
 	var addr *rpc.Address
 	if params["--integrator-address"] == nil {
@@ -362,6 +369,8 @@ func (chain *Blockchain) Shutdown() {
 
 	chain.Mempool.Shutdown() // shutdown mempool first
 	chain.Regpool.Shutdown() // shutdown regpool first
+
+	chain.OrphanDB.DB.Close()
 
 	logger.Info("Stopping Blockchain")
 	//chain.Store.Shutdown()
@@ -1110,8 +1119,30 @@ func (chain *Blockchain) Add_Complete_Block(cbl *block.Complete_Block) (err erro
 		block_logger.Info(fmt.Sprintf("Chain Height %d", chain.Get_Height()))
 	}
 
-	purge_count := chain.MiniBlocks.PurgeHeight(chain.Get_Stable_Height()) // purge all miniblocks upto this height
-	logger.V(2).Info("Purged miniblock", "count", purge_count)
+	if chain.Get_Height() > 0 {
+		stable_height := chain.Get_Stable_Height()
+
+		if globals.StoreOrphans {
+			hash, _ := chain.Load_Block_Topological_order_at_index(stable_height)
+			oldBlock, _ := chain.Load_BL_FROM_ID(hash)
+			
+			purge_count, lost_minis := chain.MiniBlocks.PurgeHeight(oldBlock, stable_height) // purge all miniblocks upto this height
+
+			logger.V(2).Info("Purged miniblock", "count", purge_count)
+
+			go func() {
+				if len(lost_minis) > 0 {
+					keys := chain.miniBlockMinerKeys(lost_minis, chain.Get_Height())
+					chain.storeOrphan(serializeHeight(stable_height), serializeCompressedKeys(keys))
+				}
+			}()
+
+		} else {
+			purge_count, _ := chain.MiniBlocks.PurgeHeight(nil, stable_height) // purge all miniblocks upto this height
+
+			logger.V(2).Info("Purged miniblock", "count", purge_count)
+		}
+	}
 
 	result = true
 
@@ -1430,7 +1461,7 @@ func (chain *Blockchain) Rewind_Chain(rewind_count int) (result bool) {
 		chain.Store.Topo_store.Clean(top_block_topo_index - i)
 	}
 
-	chain.MiniBlocks.PurgeHeight(0xffffffffffffff) // purge all miniblocks upto this height
+	chain.MiniBlocks.PurgeHeight(nil, 0xffffffffffffff) // purge all miniblocks upto this height
 
 	return true
 }
