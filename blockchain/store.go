@@ -19,8 +19,6 @@ package blockchain
 import "fmt"
 import "math/big"
 import "path/filepath"
-import "os"
-import "strconv"
 
 import "github.com/deroproject/derohe/globals"
 import "github.com/deroproject/derohe/block"
@@ -360,109 +358,4 @@ func (chain *Blockchain) Load_Complete_Block(blid crypto.Hash) (cbl *block.Compl
 
 	}
 	return
-}
-
-func (s *orphanStorage) InitializeOrphanDB() (err error) {
-	path := filepath.Join(globals.GetDataDirectory(), "orphans")
-	s.Store, err = graviton.NewDiskStore(path)
-	if err != nil {
-		return
-	}
-
-	s.FirstHeight = LoadOrphanFirstHeight()
-
-	return
-}
-
-func LoadOrphanFirstHeight () int64 {
-	filepath := filepath.Join(globals.GetDataDirectory(), "orphan_first_height.csv")
-	data, err := os.ReadFile(filepath)
-	if err != nil {
-		return 0
-	}
-
-	height, err := strconv.ParseInt(string(data), 10, 64)
-	if err != nil {
-		return 0
-	}
-	return height
-}
-
-func (s *orphanStorage) writeFirstHeight (height int64) (err error) {
-	filepath := filepath.Join(globals.GetDataDirectory(), "orphan_first_height.csv")
-	
-	heightString := strconv.FormatInt(height, 10)
-
-	return os.WriteFile(filepath, []byte(heightString), 0644)
-}
-
-func (chain *Blockchain) storeOrphan(key []byte, value []byte) (err error) {
-	ss, err := chain.OrphanDB.Store.LoadSnapshot(0)
-	if err != nil {
-		return
-	}
-
-	tree, err := ss.GetTree("orphans")
-	if err != nil {
-		return
-	}
-
-	err = tree.Put(key, value)
-	if err != nil {
-		return
-	}
-
-	_, err = graviton.Commit(tree)
-	if err != nil {
-		return
-	}
-
-	return
-}
-
-func (chain *Blockchain) getValueFromOrphanDB(key []byte) (value []byte, err error) {
-	ss, err := chain.OrphanDB.Store.LoadSnapshot(0)
-	if err != nil {
-		return
-	}
-
-	tree, err := ss.GetTree("orphans")
-	if err != nil {
-		return
-	}
-
-	value, err = tree.Get(key)
-	if err != nil {
-		return
-	}
-
-	return
-}
-
-func (chain *Blockchain) GetOrphan(height int64) [][33]byte {
-	v, err := chain.getValueFromOrphanDB(serializeHeight(height))
-	if err != nil {
-		return nil
-	}
-
-	orphans, err := deserializeCompressedKeys(v)
-	if err != nil {
-		return nil
-	}
-
-	return orphans
-}
-
-func GetOrphan(tree *graviton.Tree, height int64) [][33]byte {
-	value, err := tree.Get(serializeHeight(height))
-	if err != nil {
-		return nil
-	}
-
-	orphans, err := deserializeCompressedKeys(value)
-	if err != nil {
-		return nil
-	}
-
-	return orphans
 }
