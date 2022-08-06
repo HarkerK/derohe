@@ -18,16 +18,16 @@ type orphanDB struct {
 	DB *leveldb.DB
 }
 
-func (s *orphanDB) InitializeOrphanDB() (err error) {
+func (o *orphanDB) InitializeOrphanDB() (err error) {
 	path := filepath.Join(globals.GetDataDirectory(), "orphans")
-	s.DB, err = leveldb.OpenFile(path, nil)
+	o.DB, err = leveldb.OpenFile(path, nil)
 
 	return
 }
 
-func (s *orphanDB) isEmpty() bool {
+func (o *orphanDB) isEmpty() bool {
 	isEmpty := false
-	iter := s.DB.NewIterator(nil, nil)
+	iter := o.DB.NewIterator(nil, nil)
 	defer iter.Release()
 	if !iter.Next() {
 		isEmpty = true
@@ -36,9 +36,9 @@ func (s *orphanDB) isEmpty() bool {
 	return isEmpty
 }
 
-func (chain *Blockchain) isKeyExist(height int64) bool {
+func (o *orphanDB) isKeyExist(height int64) bool {
 	isKeyExist := false
-	_, err := chain.OrphanDB.DB.Get(serializeHeight(height), nil)
+	_, err := o.DB.Get(serializeHeight(height), nil)
 	if err == nil {
 		isKeyExist = true
 	}
@@ -46,14 +46,14 @@ func (chain *Blockchain) isKeyExist(height int64) bool {
 	return isKeyExist
 }
 
-func (chain *Blockchain) storeOrphan(key []byte, value []byte) (err error) {
-	chain.OrphanDB.DB.Put(key, value, nil)
+func (o *orphanDB) storeOrphan(key []byte, value []byte) (err error) {
+	o.DB.Put(key, value, nil)
 
 	return
 }
 
-func (chain *Blockchain) GetOrphan(height int64) [][33]byte {
-	v, err := chain.OrphanDB.DB.Get(serializeHeight(height), nil)
+func (o *orphanDB) GetOrphan(height int64) [][33]byte {
+	v, err := o.DB.Get(serializeHeight(height), nil)
 	if err != nil {
 		return nil
 	}
@@ -63,8 +63,8 @@ func (chain *Blockchain) GetOrphan(height int64) [][33]byte {
 	return orphans
 }
 
-func (s *orphanDB) getFirstHeight() int64 {
-	iter := s.DB.NewIterator(nil, nil)
+func (o *orphanDB) getFirstHeight() int64 {
+	iter := o.DB.NewIterator(nil, nil)
 	defer iter.Release()
 	iter.Next()
 	return deserializeHeight(iter.Key())
@@ -160,10 +160,10 @@ func (chain *Blockchain) GetMinerKeys(height int64) (keys [][33]byte, err error)
 	return
 }
 
-func (chain *Blockchain) GetOrphanCountRange(start, end int64) int64 {
+func (o *orphanDB) GetOrphanCountRange(start, end int64) int64 {
 	var count int64
 
-	iter := chain.OrphanDB.DB.NewIterator(&util.Range{
+	iter := o.DB.NewIterator(&util.Range{
 		Start: serializeHeight(start),
 		Limit: serializeHeight(end + 1),
 	}, nil)
@@ -177,10 +177,10 @@ func (chain *Blockchain) GetOrphanCountRange(start, end int64) int64 {
 	return count
 }
 
-func (chain *Blockchain) GetOrphanCountRangeAddress(addr_raw string, start, end int64) int64 {
+func (o *orphanDB) GetOrphanCountRangeAddress(addr_raw string, start, end int64) int64 {
 	var count int64
 
-	iter := chain.OrphanDB.DB.NewIterator(&util.Range{
+	iter := o.DB.NewIterator(&util.Range{
 		Start: serializeHeight(start),
 		Limit: serializeHeight(end + 1),
 	}, nil)
@@ -198,12 +198,12 @@ func (chain *Blockchain) GetOrphanCountRangeAddress(addr_raw string, start, end 
 	return count
 }
 
-func (chain *Blockchain) GetOrphanRateLastN(n int64, stableHeight int64) (rate float64) {
+func (o *orphanDB) GetOrphanRateLastN(n int64, stableHeight int64) (rate float64) {
 	if n < 1 || stableHeight < 1 {
 		return
 	}
 
-	if chain.OrphanDB.isEmpty() {
+	if o.isEmpty() {
 		return
 	}
 
@@ -211,7 +211,7 @@ func (chain *Blockchain) GetOrphanRateLastN(n int64, stableHeight int64) (rate f
 	end := stableHeight - 1
 	blockCount := end - start + 1
 
-	count := chain.GetOrphanCountRange(start, end)
+	count := o.GetOrphanCountRange(start, end)
 
 	rate = float64(count) / float64(blockCount*9+count) * 100.0
 
@@ -219,15 +219,15 @@ func (chain *Blockchain) GetOrphanRateLastN(n int64, stableHeight int64) (rate f
 }
 
 // print orphan miniblocks info of upto 30 days (144000 blocks)
-func (chain *Blockchain) OrphanInfo_Print(stableHeight int64) {
+func (o *orphanDB) OrphanInfo_Print(stableHeight int64) {
 	logger.Info("Orphan Miniblock Info")
 
-	if chain.OrphanDB.isEmpty() {
+	if o.isEmpty() {
 		fmt.Println("\nNo data is available: 00%")
 		return
 	}
 
-	blockCount := stableHeight - chain.OrphanDB.getFirstHeight()
+	blockCount := stableHeight - o.getFirstHeight()
 	if blockCount > 144000 {
 		blockCount = 144000
 	}
@@ -245,7 +245,7 @@ func (chain *Blockchain) OrphanInfo_Print(stableHeight int64) {
 	var dailyCounts [7]uint64
 	var weeklyCounts [4]uint64
 
-	iter := chain.OrphanDB.DB.NewIterator(&util.Range{
+	iter := o.DB.NewIterator(&util.Range{
 		Start: serializeHeight(startHeight),
 		Limit: serializeHeight(endHeight + 1),
 	}, nil)

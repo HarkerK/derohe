@@ -350,7 +350,7 @@ func main() {
 					testnet_string += " " + strconv.Itoa(chain.MiniBlocks.Count()) + " " + globals.GetOffset().Round(time.Millisecond).String() + "|" + globals.GetOffsetNTP().Round(time.Millisecond).String() + "|" + globals.GetOffsetP2P().Round(time.Millisecond).String()
 
 					if globals.StoreOrphans && (orphanRate == 0 || our_height % 5 == 0) {
-						orphanRate = chain.GetOrphanRateLastN(100, chain.Get_Stable_Height())
+						orphanRate = chain.OrphanDB.GetOrphanRateLastN(100, chain.Get_Stable_Height())
 					}
 
 					miner_count := derodrpc.CountMiners()
@@ -964,7 +964,7 @@ restart_loop:
 		case strings.ToLower(line) == "syncinfo", strings.ToLower(line) == "sync_info": // print active connections
 			p2p.Connection_Print()
 		case command == "orphan_info", command == "orphaninfo":
-			chain.OrphanInfo_Print(chain.Get_Stable_Height())
+			chain.OrphanDB.OrphanInfo_Print(chain.Get_Stable_Height())
 		case strings.ToLower(line) == "bye":
 			fallthrough
 		case strings.ToLower(line) == "exit":

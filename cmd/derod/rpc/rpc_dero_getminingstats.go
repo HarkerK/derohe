@@ -67,7 +67,7 @@ func GetMiningStats(ctx context.Context, p rpc.GetMiningStats_Params) (result rp
 		}
 	}
 
-	result.OrphanCount = chain.GetOrphanCountRangeAddress(addr_raw, p.StartHeight, p.EndHeight)
+	result.OrphanCount = chain.OrphanDB.GetOrphanCountRangeAddress(addr_raw, p.StartHeight, p.EndHeight)
 
 	result.Address = addr.String()
 	result.StartHeight = p.StartHeight

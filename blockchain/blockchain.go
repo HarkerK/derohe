@@ -1133,7 +1133,7 @@ func (chain *Blockchain) Add_Complete_Block(cbl *block.Complete_Block) (err erro
 			go func() {
 				if len(lost_minis) > 0 {
 					keys := chain.miniBlockMinerKeys(lost_minis, chain.Get_Height())
-					chain.storeOrphan(serializeHeight(stable_height), serializeCompressedKeys(keys))
+					chain.OrphanDB.storeOrphan(serializeHeight(stable_height), serializeCompressedKeys(keys))
 				}
 			}()
 
