@@ -27,7 +27,7 @@ func GetOrphan(ctx context.Context, p rpc.GetOrphan_Params) (result rpc.GetOrpha
 		return
 	}
 
-	orphans := chain.GetOrphan(p.Height)
+	orphans := chain.OrphanDB.GetOrphan(p.Height)
 
 	if len(orphans) == 0 {
 		result.Orphans = []string{}

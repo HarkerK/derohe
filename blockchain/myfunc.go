@@ -72,8 +72,8 @@ func (chain *Blockchain) storeOrphan(key []byte, value []byte) (err error) {
 	return
 }
 
-func (chain *Blockchain) getValueFromOrphanDB(key []byte) (value []byte, err error) {
-	ss, err := chain.OrphanDB.Store.LoadSnapshot(0)
+func (s *orphanStorage) getValueFromOrphanDB(key []byte) (value []byte, err error) {
+	ss, err := s.Store.LoadSnapshot(0)
 	if err != nil {
 		return
 	}
@@ -91,8 +91,8 @@ func (chain *Blockchain) getValueFromOrphanDB(key []byte) (value []byte, err err
 	return
 }
 
-func (chain *Blockchain) GetOrphan(height int64) [][33]byte {
-	v, err := chain.getValueFromOrphanDB(serializeHeight(height))
+func (s *orphanStorage) GetOrphan(height int64) [][33]byte {
+	v, err := s.getValueFromOrphanDB(serializeHeight(height))
 	if err != nil {
 		return nil
 	}
@@ -214,12 +214,12 @@ func (chain *Blockchain) GetMinerKeys(height int64) (keys [][33]byte, err error)
 	return
 }
 
-func (chain *Blockchain) GetOrphanRateLastN(n int64, stableHeight int64) (rate float64) {
+func (s *orphanStorage) GetOrphanRateLastN(n int64, stableHeight int64) (rate float64) {
 	if n < 1 || stableHeight < 1 {
 		return
 	}
 
-	ss, err := chain.OrphanDB.Store.LoadSnapshot(0)
+	ss, err := s.Store.LoadSnapshot(0)
 	if err != nil {
 		return
 	}
@@ -244,15 +244,15 @@ func (chain *Blockchain) GetOrphanRateLastN(n int64, stableHeight int64) (rate f
 }
 
 // print orphan miniblocks info of upto 30 days (144000 blocks)
-func (chain *Blockchain) OrphanInfo_Print(stableHeight int64) {
+func (s *orphanStorage) OrphanInfo_Print(stableHeight int64) {
 	logger.Info("Orphan Miniblock Info")
 
-	if chain.OrphanDB.FirstHeight == 0 || chain.OrphanDB.FirstHeight == stableHeight {
+	if s.FirstHeight == 0 || s.FirstHeight == stableHeight {
 		fmt.Println("\nNo data is available: 00%")
 		return
 	}
 
-	ss, err := chain.OrphanDB.Store.LoadSnapshot(0)
+	ss, err := s.Store.LoadSnapshot(0)
 	if err != nil {
 		return
 	}
@@ -262,7 +262,7 @@ func (chain *Blockchain) OrphanInfo_Print(stableHeight int64) {
 		return
 	}
 
-	blockCount := stableHeight - chain.OrphanDB.FirstHeight
+	blockCount := stableHeight - s.FirstHeight
 	if blockCount > 144000 {
 		blockCount = 144000
 	}

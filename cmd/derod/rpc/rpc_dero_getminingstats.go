@@ -89,7 +89,11 @@ func GetMiningStats(ctx context.Context, p rpc.GetMiningStats_Params) (result rp
 	result.Address = addr.String()
 	result.StartHeight = p.StartHeight
 	result.EndHeight = p.EndHeight
-	result.OrphanRate = float64(result.OrphanCount) / float64(result.MiniblockCount+result.OrphanCount) * 100
+
+	if result.OrphanCount != 0 {
+		result.OrphanRate = float64(result.OrphanCount) / float64(result.MiniblockCount+result.OrphanCount) * 100
+	}
+
 	result.Status = "OK"
 	err = nil
 

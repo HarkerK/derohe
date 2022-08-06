@@ -84,7 +84,7 @@ func GetBlockHeader(chain *blockchain.Blockchain, hash crypto.Hash) (result rpc.
 		}
 	}
 
-	orphans := chain.GetOrphan(result.Height)
+	orphans := chain.OrphanDB.GetOrphan(result.Height)
 	if len(orphans) == 0 {
 		result.Orphans = []string{}
 		return
