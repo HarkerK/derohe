@@ -78,6 +78,10 @@ type Connection struct {
 	Conn    net.Conn // actual object to talk
 	ConnTls net.Conn // tls layered conn
 
+	isDual     bool
+	ClientTCP  *rpc2.Client
+	TcpConn    *net.TCPConn
+
 	StateHash crypto.Hash // statehash at the top
 
 	Created time.Time // when was object created
@@ -119,9 +123,14 @@ func Address(c *Connection) string {
 func (c *Connection) exit() {
 	defer globals.Recover(0)
 	c.onceexit.Do(func() {
-		c.ConnTls.Close()
-		c.Conn.Close()
 		c.Client.Close()
+		c.Conn.Close()
+
+		if c.isDual {
+			c.ClientTCP.Close()
+			c.TcpConn.Close()
+		}
+		
 	})
 
 }
@@ -416,6 +425,9 @@ func broadcast_Block_Coded(cbl *block.Complete_Block, PeerID uint64, first_seen 
 
 		if len(connections) < 1 {
 			globals.Logger.Error(nil, "we want to broadcast block, but donot have peers, most possibly block will go stale")
+			return
+		}
+		if len(connections) == 1 && (PeerID == connections[0].Peer_ID || connections[0].Peer_ID == GetPeerID()) {
 			return
 		}
 		for _, v := range connections {

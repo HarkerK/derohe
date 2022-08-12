@@ -91,7 +91,13 @@ func (c *Connection) NotifyINV(request ObjectList, response *Dummy) (err error) 
 	if dirty { //  request inventory only if we want it
 		var oresponse Objects
 		fill_common(&need.Common) // fill common info
-		if err = c.Client.Call("Peer.GetObject", need, &oresponse); err != nil {
+
+		client := c.Client
+		if c.isDual {
+			client = c.ClientTCP
+		}
+
+		if err = client.Call("Peer.GetObject", need, &oresponse); err != nil {
 			c.logger.V(2).Error(err, "Call failed GetObject", "need_objects", need)
 			c.exit()
 			return

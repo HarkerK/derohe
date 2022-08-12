@@ -70,8 +70,13 @@ func (connection *Connection) bootstrap_chain() {
 		request.TopoHeights = append(request.TopoHeights, topos[i])
 	}
 
+	client := connection.Client
+	if connection.isDual {
+		client = connection.ClientTCP
+	}
+
 	fill_common(&request.Common) // fill common info
-	if err := connection.Client.Call("Peer.ChangeSet", request, &response); err != nil {
+	if err := client.Call("Peer.ChangeSet", request, &response); err != nil {
 		connection.logger.V(1).Error(err, "Call failed ChangeSet")
 		return
 	}
@@ -105,7 +110,7 @@ func (connection *Connection) bootstrap_chain() {
 			ts_request := Request_Tree_Section_Struct{Topo: request.TopoHeights[0], TreeName: []byte(config.BALANCE_TREE), Section: section[:], SectionLength: uint64(path_length)}
 			var ts_response Response_Tree_Section_Struct
 			fill_common(&ts_response.Common)
-			if err := connection.Client.Call("Peer.TreeSection", ts_request, &ts_response); err != nil {
+			if err := client.Call("Peer.TreeSection", ts_request, &ts_response); err != nil {
 				connection.logger.V(1).Error(err, "Call failed TreeSection")
 				return
 			} else {
@@ -169,7 +174,7 @@ func (connection *Connection) bootstrap_chain() {
 			ts_request := Request_Tree_Section_Struct{Topo: request.TopoHeights[0], TreeName: []byte(config.SC_META), Section: section[:], SectionLength: uint64(path_length)}
 			var ts_response Response_Tree_Section_Struct
 			fill_common(&ts_response.Common)
-			if err := connection.Client.Call("Peer.TreeSection", ts_request, &ts_response); err != nil {
+			if err := client.Call("Peer.TreeSection", ts_request, &ts_response); err != nil {
 				connection.logger.V(1).Error(err, "Call failed TreeSection")
 				return
 			} else {
@@ -199,7 +204,7 @@ func (connection *Connection) bootstrap_chain() {
 					sc_request := Request_Tree_Section_Struct{Topo: request.TopoHeights[0], TreeName: ts_response.Keys[j], Section: section[:], SectionLength: uint64(0)}
 					var sc_response Response_Tree_Section_Struct
 					fill_common(&sc_response.Common)
-					if err := connection.Client.Call("Peer.TreeSection", sc_request, &sc_response); err != nil {
+					if err := client.Call("Peer.TreeSection", sc_request, &sc_response); err != nil {
 						connection.logger.V(1).Error(err, "Call failed TreeSection")
 						return
 					} else {

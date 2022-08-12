@@ -16,40 +16,37 @@
 
 package p2p
 
-import "fmt"
-import "net"
+import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha1"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
+	"fmt"
+	"math/big"
+	"net"
+	"os"
+	"runtime/debug"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
-import "os"
-import "time"
-import "sort"
-import "sync"
-import "strings"
-import "math/big"
-import "strconv"
+	"github.com/cenkalti/rpc2"
+	"github.com/deroproject/derohe/blockchain"
+	"github.com/deroproject/derohe/config"
+	"github.com/deroproject/derohe/globals"
+	"github.com/deroproject/derohe/metrics"
+	"github.com/go-logr/logr"
 
-import "crypto/sha1"
-import "crypto/ecdsa"
-import "crypto/elliptic"
-
-import "crypto/tls"
-import "crypto/rand"
-import "crypto/x509"
-import "encoding/pem"
-import "sync/atomic"
-import "runtime/debug"
-
-import "github.com/go-logr/logr"
-
-import "github.com/deroproject/derohe/config"
-import "github.com/deroproject/derohe/globals"
-import "github.com/deroproject/derohe/metrics"
-import "github.com/deroproject/derohe/blockchain"
-
-import "github.com/xtaci/kcp-go/v5"
-import "golang.org/x/crypto/pbkdf2"
-import "golang.org/x/time/rate"
-
-import "github.com/cenkalti/rpc2"
+	"github.com/xtaci/kcp-go/v5"
+	"golang.org/x/crypto/pbkdf2"
+	"golang.org/x/time/rate"
+)
 
 //import "github.com/txthinking/socks5"
 
@@ -392,11 +389,37 @@ func connect_with_endpoint(endpoint string, sync_node bool) {
 		return //nil, fmt.Errorf("Dial failed err %s", err.Error())
 	}
 
+	var tcpconn *net.TCPConn
+	var tlsconnTcp *tls.Conn
+	_, err = net.ResolveTCPAddr("tcp", endpoint)
+	if err != nil {
+		logger.V(3).Error(err, "Resolve TCP address failed:", "endpoint", endpoint)
+		//return
+	} else {
+		time.Sleep(50 * time.Microsecond)
+		tcpc, err := net.DialTimeout("tcp", endpoint, 5*time.Second)
+		if err != nil {
+			logger.V(3).Error(err, "TCP dial failed:", "endpoint", endpoint)
+			//conn.Close()
+			//return
+		} else {
+			tcpconn = tcpc.(*net.TCPConn)
+			tcpconn.SetKeepAlive(true)
+			tcpconn.SetKeepAlivePeriod(8 * time.Second)
+			tcpconn.SetLinger(0) // discard any pending data
+
+			tlsconnTcp = tls.Client(tcpconn, &tls.Config{InsecureSkipVerify: true})
+
+			logger.V(2).Info("Connecting over both KCP and TCP", "IP", endpoint)
+		}
+	}
+
 	tunekcp(conn) // set tunings for low latency
 
 	// TODO we need to choose fastest cipher here ( so both clients/servers are not loaded)
 	conntls := tls.Client(conn, &tls.Config{InsecureSkipVerify: true})
-	process_outgoing_connection(conn, conntls, remote_ip, false, sync_node)
+
+	process_outgoing_connection(conn, conntls, remote_ip, false, sync_node, tcpconn, tlsconnTcp)
 
 }
 
@@ -501,7 +524,7 @@ func P2P_Server_v2() {
 
 	default_address := "0.0.0.0:0" // be default choose a random port
 	if _, ok := globals.Arguments["--p2p-bind"]; ok && globals.Arguments["--p2p-bind"] != nil {
-		addr, err := net.ResolveTCPAddr("tcp", globals.Arguments["--p2p-bind"].(string))
+		addr, err := net.ResolveUDPAddr("udp", globals.Arguments["--p2p-bind"].(string))
 		if err != nil {
 			logger.Error(err, "--p2p-bind address is invalid")
 		} else {
@@ -534,6 +557,19 @@ func P2P_Server_v2() {
 		if int64(in+out) > Max_Peers { // do not allow incoming ddos
 			connection.exit()
 			return
+		}
+
+		tcpconn_interface, ok1 := c.State.Get("tcpconn")
+		clientTCP_interface, ok2 := c.State.Get("clientTCP")
+		if ok1 && ok2 {
+			tcpconn := tcpconn_interface.(*net.TCPConn)
+			clientTCP := clientTCP_interface.(*rpc2.Client)
+
+			connection.isDual = true
+			connection.TcpConn = tcpconn
+			connection.ClientTCP = clientTCP
+			clientTCP.State = rpc2.NewState()
+			clientTCP.State.Set("c", connection)
 		}
 
 		c.State.Set("c", connection) // set pointer to connection
@@ -569,6 +605,20 @@ func P2P_Server_v2() {
 
 	logger.Info("P2P is listening", "address", l.Addr().String())
 
+	var tcpLis *net.TCPListener
+	addr, err := net.ResolveTCPAddr("tcp", l.Addr().String())
+	if err != nil {
+		logger.Error(err, "Could not listen TCP", "address", l.Addr().String())
+		//return
+	} else {
+		tcpLis, err = net.ListenTCP("tcp", addr)
+		if err != nil {
+			logger.Error(err, "Could not listen TCP", "address", l.Addr().String())
+			//return
+		}
+		defer tcpLis.Close()
+	}
+
 	// A common pattern is to start a loop to continously accept connections
 	for {
 		conn, err := l.AcceptKCP() //accept connections using Listener.Accept()
@@ -599,10 +649,26 @@ func P2P_Server_v2() {
 		if IsAddressConnected(ParseIPNoError(raddr.String())) {
 			logger.V(4).Info("incoming address is already connected", "ip", raddr.String())
 			conn.Close()
+			continue
 
 		} else if IsAddressInBanList(ParseIPNoError(raddr.IP.String())) { //if incoming IP is banned, disconnect now
 			logger.V(2).Info("Incoming IP is banned, disconnecting now", "IP", raddr.IP.String())
 			conn.Close()
+			continue
+		}
+
+		var tcpconn *net.TCPConn
+		if tcpLis != nil {
+			tcpLis.SetDeadline(time.Now().Add(5 * time.Second))
+			tcpconn, err = tcpLis.AcceptTCP()
+			if err == nil {
+				tcpconn.SetKeepAlive(true)
+				tcpconn.SetKeepAlivePeriod(8 * time.Second)
+				tcpconn.SetLinger(0) // discard any pending data
+			}
+		} else {
+			//conn.Close()
+			//continue
 		}
 
 		tunekcp(conn) // tuning paramters for local stack
@@ -611,6 +677,19 @@ func P2P_Server_v2() {
 		state.Set("addr", raddr)
 		state.Set("conn", conn)
 		state.Set("tlsconn", tlsconn)
+
+		if tcpconn != nil {
+			tlsconnTcp := tls.Server(tcpconn, tlsconfig)
+			//clientTCP := rpc2.NewClientWithCodec(NewCBORCodec(tlsconnTcp))ServeConn
+			clientTCP := rpc2.NewClient(tlsconnTcp)
+			set_handlers(clientTCP)
+			state.Set("tcpconn", tcpconn)
+			state.Set("clientTCP", clientTCP)
+
+			go clientTCP.Run()
+
+			logger.V(2).Info("Connecting over both KCP and TCP", "IP", raddr.String())
+		}
 
 		go srv.ServeCodecWithState(NewCBORCodec(tlsconn), state)
 
@@ -678,7 +757,7 @@ func set_handlers(o interface{}) {
 
 }
 
-func process_outgoing_connection(conn net.Conn, tlsconn net.Conn, remote_addr net.Addr, incoming, sync_node bool) {
+func process_outgoing_connection(conn net.Conn, tlsconn net.Conn, remote_addr net.Addr, incoming, sync_node bool, tcpconn *net.TCPConn, tlsconnTcp *tls.Conn) {
 	defer globals.Recover(0)
 
 	client := rpc2.NewClientWithCodec(NewCBORCodec(tlsconn))
@@ -687,6 +766,20 @@ func process_outgoing_connection(conn net.Conn, tlsconn net.Conn, remote_addr ne
 	defer c.exit()
 	c.logger = logger.WithName("outgoing").WithName(remote_addr.String())
 	set_handlers(client)
+
+	if tcpconn != nil && tlsconnTcp != nil {
+		clientTCP := rpc2.NewClient(tlsconnTcp)
+		set_handlers(clientTCP)
+
+		c.isDual = true
+		c.TcpConn = tcpconn
+		c.ClientTCP = clientTCP
+
+		clientTCP.State = rpc2.NewState()
+		clientTCP.State.Set("c", c)
+
+		go clientTCP.Run()
+	}
 
 	client.State = rpc2.NewState()
 	client.State.Set("c", c)

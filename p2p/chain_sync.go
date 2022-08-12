@@ -154,7 +154,12 @@ try_again:
 	request.TopoHeights = append(request.TopoHeights, 0)
 	fill_common(&request.Common) // fill common info
 
-	if err := connection.Client.Call("Peer.Chain", request, &response); err != nil {
+	client := connection.Client
+	if connection.isDual {
+		client = connection.ClientTCP
+	}
+
+	if err := client.Call("Peer.Chain", request, &response); err != nil {
 		connection.logger.V(2).Error(err, "Call failed Chain")
 		return
 	}
@@ -221,7 +226,7 @@ try_again:
 				//fmt.Printf("inserting blocks %d %x\n", (int64(i) + response.Start_topoheight), response.Block_list[i][:])
 				orequest.Block_list = append(orequest.Block_list, response.Block_list[i])
 				fill_common(&orequest.Common)
-				if err := connection.Client.Call("Peer.GetObject", orequest, &oresponse); err != nil {
+				if err := client.Call("Peer.GetObject", orequest, &oresponse); err != nil {
 					connection.logger.V(2).Error(err, "Call failed GetObject")
 					return
 				} else { // process the response
@@ -269,7 +274,7 @@ try_again:
 
 				orequest.Block_list = append(orequest.Block_list, response.Block_list[i])
 				fill_common(&orequest.Common)
-				if err := connection.Client.Call("Peer.GetObject", orequest, &oresponse); err != nil {
+				if err := client.Call("Peer.GetObject", orequest, &oresponse); err != nil {
 					connection.logger.V(2).Error(err, "Call failed GetObject")
 					return
 				} else { // process the response
